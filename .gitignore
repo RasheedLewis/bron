@@ -1,0 +1,188 @@
+# ===========================
+# Bron Project .gitignore
+# ===========================
+
+# -----------------
+# macOS
+# -----------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# -----------------
+# Xcode / iOS
+# -----------------
+# Build
+ios/**/build/
+ios/**/DerivedData/
+ios/**/*.xcworkspace/xcuserdata/
+ios/**/*.xcodeproj/xcuserdata/
+ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# User-specific
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+ios/**/.build/
+ios/**/Packages/
+ios/**/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+ios/**/Package.resolved
+
+# CocoaPods (if used later)
+ios/**/Pods/
+ios/**/Podfile.lock
+
+# Carthage (if used later)
+ios/**/Carthage/Build/
+ios/**/Carthage/Checkouts/
+
+# fastlane
+ios/**/fastlane/report.xml
+ios/**/fastlane/Preview.html
+ios/**/fastlane/screenshots/**/*.png
+ios/**/fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/
+
+# -----------------
+# Python / Server
+# -----------------
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+.env
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# pytype
+.pytype/
+
+# ruff
+.ruff_cache/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# -----------------
+# IDE / Editors
+# -----------------
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains (PyCharm, AppCode)
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# -----------------
+# Logs & Temp
+# -----------------
+*.log
+logs/
+tmp/
+temp/
+
+# -----------------
+# Secrets & Config
+# -----------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# -----------------
+# Miscellaneous
+# -----------------
+*.bak
+*.tmp
+*.temp
+.cache/
+node_modules/
+
