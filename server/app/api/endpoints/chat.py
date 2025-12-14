@@ -6,14 +6,54 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models import ChatMessage, MessageRole, BronInstance, UIRecipe
 from app.schemas import MessageCreate, MessageResponse, ChatHistoryResponse, UIRecipeSubmission
+from app.schemas.ui_recipe import UIRecipeResponse
 from app.services.orchestrator import TaskOrchestrator
 
 router = APIRouter()
+
+
+async def message_to_response(db: AsyncSession, message: ChatMessage) -> MessageResponse:
+    """Convert a ChatMessage to MessageResponse, properly loading relationships."""
+    # Eagerly load the message with ui_recipe
+    result = await db.execute(
+        select(ChatMessage)
+        .options(selectinload(ChatMessage.ui_recipe))
+        .where(ChatMessage.id == message.id)
+    )
+    loaded_message = result.scalar_one()
+    
+    # Build response dict
+    response_data = {
+        "id": loaded_message.id,
+        "bron_id": loaded_message.bron_id,
+        "role": loaded_message.role,
+        "content": loaded_message.content,
+        "task_state_update": loaded_message.task_state_update,
+        "created_at": loaded_message.created_at,
+        "ui_recipe": None,
+    }
+    
+    # Add UI Recipe if present
+    if loaded_message.ui_recipe:
+        recipe = loaded_message.ui_recipe
+        response_data["ui_recipe"] = {
+            "id": recipe.id,
+            "component_type": recipe.component_type,
+            "title": recipe.title,
+            "description": recipe.description,
+            "schema": recipe.schema,
+            "required_fields": recipe.required_fields,
+            "is_submitted": recipe.is_submitted,
+            "created_at": recipe.created_at,
+        }
+    
+    return MessageResponse(**response_data)
 
 
 @router.get("/{bron_id}/history", response_model=ChatHistoryResponse)
@@ -42,9 +82,10 @@ async def get_chat_history(
     )
     total = count_result.scalar() or 0
     
-    # Get messages
+    # Get messages with eager loading of ui_recipe
     result = await db.execute(
         select(ChatMessage)
+        .options(selectinload(ChatMessage.ui_recipe))
         .where(ChatMessage.bron_id == bron_id)
         .order_by(ChatMessage.created_at.asc())
         .offset(offset)
@@ -52,8 +93,33 @@ async def get_chat_history(
     )
     messages = result.scalars().all()
     
+    # Convert to response models
+    message_responses = []
+    for m in messages:
+        response_data = {
+            "id": m.id,
+            "bron_id": m.bron_id,
+            "role": m.role,
+            "content": m.content,
+            "task_state_update": m.task_state_update,
+            "created_at": m.created_at,
+            "ui_recipe": None,
+        }
+        if m.ui_recipe:
+            response_data["ui_recipe"] = {
+                "id": m.ui_recipe.id,
+                "component_type": m.ui_recipe.component_type,
+                "title": m.ui_recipe.title,
+                "description": m.ui_recipe.description,
+                "schema": m.ui_recipe.schema,
+                "required_fields": m.ui_recipe.required_fields,
+                "is_submitted": m.ui_recipe.is_submitted,
+                "created_at": m.ui_recipe.created_at,
+            }
+        message_responses.append(MessageResponse(**response_data))
+    
     return ChatHistoryResponse(
-        messages=[MessageResponse.model_validate(m) for m in messages],
+        messages=message_responses,
         total=total,
     )
 
@@ -116,7 +182,7 @@ async def send_message(
         await db.flush()
         await db.refresh(response)
     
-    return MessageResponse.model_validate(response)
+    return await message_to_response(db, response)
 
 
 @router.post("/message/simple", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
@@ -173,7 +239,7 @@ async def send_simple_message(
     await db.flush()
     await db.refresh(response)
     
-    return MessageResponse.model_validate(response)
+    return await message_to_response(db, response)
 
 
 @router.post("/ui-recipe/submit", response_model=MessageResponse)
@@ -228,7 +294,7 @@ async def submit_ui_recipe(
         await db.flush()
         await db.refresh(response)
     
-    return MessageResponse.model_validate(response)
+    return await message_to_response(db, response)
 
 
 @router.get("/pending-recipes/{bron_id}")

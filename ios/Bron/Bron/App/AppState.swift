@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     
     // Loading states
     @Published var isLoading: Bool = false
+    @Published var error: String?
     
     // Repositories
     let bronRepository: BronRepository
@@ -33,21 +34,49 @@ final class AppState: ObservableObject {
         self.skillRepository = SkillRepository(context: context)
     }
     
-    /// Create a new Bron agent
-    func createBron(name: String) -> BronInstance {
+    // MARK: - Server Sync
+    
+    /// Sync all data with the server
+    func syncWithServer() async {
+        isLoading = true
+        error = nil
+        
+        await bronRepository.syncWithServer()
+        
+        // Check for errors
+        if let repoError = bronRepository.error {
+            error = repoError
+        }
+        
+        isLoading = false
+    }
+    
+    /// Create a new Bron agent on the server
+    func createBron(name: String) async -> BronInstance? {
+        await bronRepository.createOnServer(name: name)
+    }
+    
+    /// Delete a Bron from the server
+    func deleteBron(id: UUID) async -> Bool {
+        await bronRepository.deleteFromServer(id: id)
+    }
+    
+    // MARK: - Local Operations (legacy support)
+    
+    /// Create a new Bron locally (for offline mode)
+    func createBronLocally(name: String) -> BronInstance {
         bronRepository.create(name: name)
     }
     
     /// Create a new Task for a Bron
-    func createTask(title: String, bronId: UUID, category: TaskCategory = .other) -> Task? {
+    func createTask(title: String, bronId: UUID, category: TaskCategory = .other) -> BronTask? {
         taskRepository.create(title: title, bronId: bronId, category: category)
     }
     
-    /// Refresh all data
+    /// Refresh all local data
     func refresh() {
         bronRepository.fetchAll()
         taskRepository.fetchAll()
         skillRepository.fetchAll()
     }
 }
-

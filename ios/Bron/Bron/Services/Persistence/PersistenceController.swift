@@ -277,7 +277,7 @@ extension PersistenceController {
         // Bron -> Tasks (one-to-many)
         let bronToTasks = NSRelationshipDescription()
         bronToTasks.name = "tasks"
-        bronToTasks.destinationType = taskEntity
+        bronToTasks.destinationEntity = taskEntity
         bronToTasks.minCount = 0
         bronToTasks.maxCount = 0 // to-many
         bronToTasks.deleteRule = .cascadeDeleteRule
@@ -285,7 +285,7 @@ extension PersistenceController {
         // Task -> Bron (many-to-one)
         let taskToBron = NSRelationshipDescription()
         taskToBron.name = "bron"
-        taskToBron.destinationType = bronEntity
+        taskToBron.destinationEntity = bronEntity
         taskToBron.minCount = 1
         taskToBron.maxCount = 1
         taskToBron.deleteRule = .nullifyDeleteRule
@@ -296,7 +296,7 @@ extension PersistenceController {
         // Bron -> CurrentTask (one-to-one, optional)
         let bronToCurrentTask = NSRelationshipDescription()
         bronToCurrentTask.name = "currentTask"
-        bronToCurrentTask.destinationType = taskEntity
+        bronToCurrentTask.destinationEntity = taskEntity
         bronToCurrentTask.minCount = 0
         bronToCurrentTask.maxCount = 1
         bronToCurrentTask.deleteRule = .nullifyDeleteRule
@@ -309,7 +309,7 @@ extension PersistenceController {
         // Bron -> Messages (one-to-many)
         let bronToMessages = NSRelationshipDescription()
         bronToMessages.name = "messages"
-        bronToMessages.destinationType = messageEntity
+        bronToMessages.destinationEntity = messageEntity
         bronToMessages.minCount = 0
         bronToMessages.maxCount = 0
         bronToMessages.deleteRule = .cascadeDeleteRule
@@ -317,7 +317,7 @@ extension PersistenceController {
         // Message -> Bron (many-to-one)
         let messageToBron = NSRelationshipDescription()
         messageToBron.name = "bron"
-        messageToBron.destinationType = bronEntity
+        messageToBron.destinationEntity = bronEntity
         messageToBron.minCount = 1
         messageToBron.maxCount = 1
         messageToBron.deleteRule = .nullifyDeleteRule
@@ -333,7 +333,7 @@ extension PersistenceController {
         // Task -> UIRecipes (one-to-many)
         let taskToRecipes = NSRelationshipDescription()
         taskToRecipes.name = "uiRecipes"
-        taskToRecipes.destinationType = uiRecipeEntity
+        taskToRecipes.destinationEntity = uiRecipeEntity
         taskToRecipes.minCount = 0
         taskToRecipes.maxCount = 0
         taskToRecipes.deleteRule = .cascadeDeleteRule
@@ -341,7 +341,7 @@ extension PersistenceController {
         // UIRecipe -> Task (many-to-one, optional)
         let recipeToTask = NSRelationshipDescription()
         recipeToTask.name = "task"
-        recipeToTask.destinationType = taskEntity
+        recipeToTask.destinationEntity = taskEntity
         recipeToTask.minCount = 0
         recipeToTask.maxCount = 1
         recipeToTask.deleteRule = .nullifyDeleteRule
@@ -357,7 +357,7 @@ extension PersistenceController {
         // Message -> UIRecipe (one-to-one, optional)
         let messageToRecipe = NSRelationshipDescription()
         messageToRecipe.name = "uiRecipe"
-        messageToRecipe.destinationType = uiRecipeEntity
+        messageToRecipe.destinationEntity = uiRecipeEntity
         messageToRecipe.minCount = 0
         messageToRecipe.maxCount = 1
         messageToRecipe.deleteRule = .cascadeDeleteRule
@@ -365,7 +365,7 @@ extension PersistenceController {
         // UIRecipe -> Message (one-to-one, optional)
         let recipeToMessage = NSRelationshipDescription()
         recipeToMessage.name = "message"
-        recipeToMessage.destinationType = messageEntity
+        recipeToMessage.destinationEntity = messageEntity
         recipeToMessage.minCount = 0
         recipeToMessage.maxCount = 1
         recipeToMessage.deleteRule = .nullifyDeleteRule
@@ -381,14 +381,14 @@ extension PersistenceController {
         // Skill -> Steps (one-to-many)
         let skillToSteps = NSRelationshipDescription()
         skillToSteps.name = "steps"
-        skillToSteps.destinationType = stepEntity
+        skillToSteps.destinationEntity = stepEntity
         skillToSteps.minCount = 0
         skillToSteps.maxCount = 0
         skillToSteps.deleteRule = .cascadeDeleteRule
         
         let stepToSkill = NSRelationshipDescription()
         stepToSkill.name = "skill"
-        stepToSkill.destinationType = skillEntity
+        stepToSkill.destinationEntity = skillEntity
         stepToSkill.minCount = 1
         stepToSkill.maxCount = 1
         stepToSkill.deleteRule = .nullifyDeleteRule
@@ -399,14 +399,14 @@ extension PersistenceController {
         // Skill -> Parameters (one-to-many)
         let skillToParams = NSRelationshipDescription()
         skillToParams.name = "parameters"
-        skillToParams.destinationType = parameterEntity
+        skillToParams.destinationEntity = parameterEntity
         skillToParams.minCount = 0
         skillToParams.maxCount = 0
         skillToParams.deleteRule = .cascadeDeleteRule
         
         let paramToSkill = NSRelationshipDescription()
         paramToSkill.name = "skill"
-        paramToSkill.destinationType = skillEntity
+        paramToSkill.destinationEntity = skillEntity
         paramToSkill.minCount = 1
         paramToSkill.maxCount = 1
         paramToSkill.deleteRule = .nullifyDeleteRule

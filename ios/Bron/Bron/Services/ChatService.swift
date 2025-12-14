@@ -6,8 +6,10 @@
 //
 
 import Foundation
+import CoreData
 
 /// Response from Claude agent
+/// Note: APIClient handles snake_case conversion automatically
 struct AgentChatResponse: Codable {
     let id: UUID
     let bronId: UUID
@@ -16,16 +18,6 @@ struct AgentChatResponse: Codable {
     let uiRecipe: UIRecipe?
     let taskStateUpdate: String?
     let createdAt: Date
-    
-    enum CodingKeys: String, CodingKey {
-        case id
-        case bronId = "bron_id"
-        case role
-        case content
-        case uiRecipe = "ui_recipe"
-        case taskStateUpdate = "task_state_update"
-        case createdAt = "created_at"
-    }
     
     /// Convert to ChatMessage
     func toChatMessage() -> ChatMessage {
@@ -197,7 +189,9 @@ class ChatViewModel: ObservableObject {
         do {
             // Send to API
             let response = try await chatService.sendMessage(bronId: bronId, content: content)
+            print("✅ Got response: \(response.content)")
             messages.append(response)
+            print("📝 Messages count: \(messages.count)")
             
             // Check for UI Recipe
             if let recipe = response.uiRecipe {
@@ -220,6 +214,7 @@ class ChatViewModel: ObservableObject {
                 )
             }
         } catch {
+            print("❌ Send message error: \(error)")
             self.error = "Failed to send message"
             // Remove optimistic message
             messages.removeLast()

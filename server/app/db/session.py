@@ -35,6 +35,7 @@ async def init_db():
         SkillStep,
         SkillParameter,
         UIRecipe,
+        UIStyle,
         ChatMessage,
     )
     
