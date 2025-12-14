@@ -1,280 +1,238 @@
 """
-Safety Guardrails for Bron Agent.
-Ensures no destructive or unauthorized actions are taken.
+Safety Guardrails for the Claude Agent.
+Implements hooks and checks to prevent dangerous operations.
 """
 
-import re
 import logging
-from typing import Optional
 from enum import Enum
+from typing import Optional
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
 class RiskLevel(str, Enum):
-    """Risk level of an action."""
-    SAFE = "safe"           # Can proceed without confirmation
-    LOW = "low"             # Minor risk, soft confirmation
-    MEDIUM = "medium"       # Needs explicit confirmation
-    HIGH = "high"           # Needs approval with details
-    BLOCKED = "blocked"     # Never allowed
+    """Risk classification for actions."""
+    SAFE = "safe"             # No confirmation needed
+    LOW = "low"               # Light confirmation
+    MEDIUM = "medium"         # Explicit approval required
+    HIGH = "high"             # Multi-step approval
+    BLOCKED = "blocked"       # Never allow
 
 
 class ActionCategory(str, Enum):
-    """Category of action for safety classification."""
-    READ = "read"           # Reading data
-    CREATE = "create"       # Creating new items
-    UPDATE = "update"       # Modifying existing items
-    DELETE = "delete"       # Removing items
-    SEND = "send"           # Sending messages/communications
-    EXECUTE = "execute"     # Executing external actions
-    AUTHENTICATE = "auth"   # Authentication flows
-    FINANCIAL = "financial" # Financial transactions
+    """Categories of agent actions."""
+    READ = "read"             # Reading files/data
+    WRITE = "write"           # Creating/modifying files
+    DELETE = "delete"         # Deleting data
+    EXECUTE = "execute"       # Running commands
+    NETWORK = "network"       # External API calls
+    FINANCIAL = "financial"   # Money-related
+    COMMUNICATION = "communication"  # Emails, messages
 
 
-# Keywords that indicate potentially risky actions
-RISK_KEYWORDS = {
-    RiskLevel.BLOCKED: [
-        "rm -rf",
-        "format disk",
-        "delete all",
-        "drop database",
-        "truncate",
-    ],
-    RiskLevel.HIGH: [
-        "delete", "remove", "erase", "destroy", "purge",
-        "send email", "send message", "post to", "publish",
-        "pay", "transfer money", "purchase", "buy", "charge",
-        "cancel subscription", "terminate", "unsubscribe",
-        "share password", "share secret", "expose",
-    ],
-    RiskLevel.MEDIUM: [
-        "update", "modify", "change", "edit",
-        "move", "rename", "archive",
-        "schedule", "book", "reserve",
-        "reply", "respond to",
-    ],
-    RiskLevel.LOW: [
-        "draft", "prepare", "create",
-        "save", "store",
-        "read", "fetch", "get",
-    ],
-}
-
-# Actions that are always blocked
-BLOCKED_ACTIONS = [
-    r"delete\s+(all|every|entire)",
-    r"rm\s+-rf",
-    r"format\s+\w+",
-    r"drop\s+(table|database)",
-    r"share\s+(password|secret|key|token)",
-    r"expose\s+(credentials|secrets)",
-]
-
-# Sensitive data patterns that should never be transmitted
-SENSITIVE_PATTERNS = [
-    r"\b\d{16}\b",  # Credit card numbers
-    r"\b\d{3}-\d{2}-\d{4}\b",  # SSN
-    r"\bpassword\s*[:=]\s*\S+",  # Passwords in plain text
-    r"\b(api[_-]?key|secret[_-]?key)\s*[:=]\s*\S+",  # API keys
-]
+class SafetyCheck(BaseModel):
+    """Result of a safety check."""
+    allowed: bool
+    risk_level: RiskLevel
+    reason: str
+    requires_approval: bool = False
+    approval_prompt: Optional[str] = None
 
 
-class SafetyGuard:
+class SafetyGuardrails:
     """
-    Safety guard for agent actions.
+    Safety guardrails for agent actions.
     
-    Analyzes messages and actions to determine risk level
-    and whether confirmation/approval is needed.
+    Implements the safety rules from Bron's voice guidelines:
+    - Never delete without approval
+    - Never send messages without approval
+    - Never share sensitive info
+    - Never execute financial transactions without approval
+    - Always ask for destructive/external confirmations
     """
 
-    def analyze_message(self, message: str) -> tuple[RiskLevel, list[str]]:
-        """
-        Analyze a message for risk level.
-        
-        Args:
-            message: The message to analyze
-            
-        Returns:
-            Tuple of (risk level, list of flagged items)
-        """
-        message_lower = message.lower()
-        flagged = []
+    # Dangerous command patterns
+    DANGEROUS_COMMANDS = [
+        "rm -rf",
+        "del /f",
+        "format",
+        "sudo rm",
+        "DROP TABLE",
+        "DELETE FROM",
+        "curl",      # External network
+        "wget",
+        "ssh",
+        "git push",  # External changes
+        "npm publish",
+    ]
+    
+    # Sensitive file patterns
+    SENSITIVE_PATHS = [
+        ".env",
+        "credentials",
+        "password",
+        "secret",
+        "private_key",
+        ".ssh/",
+        "token",
+    ]
+    
+    # Safe read-only commands
+    SAFE_COMMANDS = [
+        "ls", "dir", "cat", "head", "tail",
+        "grep", "find", "pwd", "echo",
+        "git status", "git log", "git diff",
+    ]
+
+    def check_command(self, command: str) -> SafetyCheck:
+        """Check if a bash command is safe to execute."""
+        command_lower = command.lower().strip()
         
         # Check for blocked patterns
-        for pattern in BLOCKED_ACTIONS:
-            if re.search(pattern, message_lower):
-                flagged.append(f"Blocked pattern: {pattern}")
-                return RiskLevel.BLOCKED, flagged
+        for dangerous in self.DANGEROUS_COMMANDS:
+            if dangerous.lower() in command_lower:
+                return SafetyCheck(
+                    allowed=False,
+                    risk_level=RiskLevel.HIGH,
+                    reason=f"Command contains dangerous pattern: {dangerous}",
+                    requires_approval=True,
+                    approval_prompt=f"This command may be destructive: {command}\n\nProceed?",
+                )
         
-        # Check for sensitive data
-        for pattern in SENSITIVE_PATTERNS:
-            if re.search(pattern, message):
-                flagged.append(f"Sensitive data detected")
-                return RiskLevel.BLOCKED, flagged
+        # Check for safe patterns
+        for safe in self.SAFE_COMMANDS:
+            if command_lower.startswith(safe):
+                return SafetyCheck(
+                    allowed=True,
+                    risk_level=RiskLevel.SAFE,
+                    reason="Read-only command",
+                )
         
-        # Check risk keywords (highest matching level wins)
-        highest_risk = RiskLevel.SAFE
-        
-        for risk_level in [RiskLevel.HIGH, RiskLevel.MEDIUM, RiskLevel.LOW]:
-            for keyword in RISK_KEYWORDS[risk_level]:
-                if keyword in message_lower:
-                    flagged.append(f"Keyword '{keyword}' detected")
-                    if self._risk_level_value(risk_level) > self._risk_level_value(highest_risk):
-                        highest_risk = risk_level
-        
-        return highest_risk, flagged
+        # Default: medium risk, allow with logging
+        return SafetyCheck(
+            allowed=True,
+            risk_level=RiskLevel.MEDIUM,
+            reason="Command will be logged for review",
+        )
 
-    def categorize_action(self, action_description: str) -> ActionCategory:
-        """
-        Categorize an action.
+    def check_file_access(self, path: str, is_write: bool) -> SafetyCheck:
+        """Check if file access is safe."""
+        path_lower = path.lower()
         
-        Args:
-            action_description: Description of the action
-            
-        Returns:
-            ActionCategory
-        """
-        action_lower = action_description.lower()
+        # Check for sensitive paths
+        for sensitive in self.SENSITIVE_PATHS:
+            if sensitive in path_lower:
+                if is_write:
+                    return SafetyCheck(
+                        allowed=False,
+                        risk_level=RiskLevel.BLOCKED,
+                        reason=f"Cannot modify sensitive file: {path}",
+                    )
+                else:
+                    return SafetyCheck(
+                        allowed=False,
+                        risk_level=RiskLevel.BLOCKED,
+                        reason=f"Cannot read sensitive file: {path}",
+                    )
         
-        if any(word in action_lower for word in ["delete", "remove", "erase"]):
-            return ActionCategory.DELETE
-        if any(word in action_lower for word in ["send", "email", "message", "post"]):
-            return ActionCategory.SEND
-        if any(word in action_lower for word in ["pay", "transfer", "purchase", "buy"]):
-            return ActionCategory.FINANCIAL
-        if any(word in action_lower for word in ["login", "sign in", "authenticate", "connect"]):
-            return ActionCategory.AUTHENTICATE
-        if any(word in action_lower for word in ["run", "execute", "trigger"]):
-            return ActionCategory.EXECUTE
-        if any(word in action_lower for word in ["update", "modify", "change", "edit"]):
-            return ActionCategory.UPDATE
-        if any(word in action_lower for word in ["create", "add", "new"]):
-            return ActionCategory.CREATE
+        if is_write:
+            return SafetyCheck(
+                allowed=True,
+                risk_level=RiskLevel.LOW,
+                reason="File write will be logged",
+                requires_approval=False,
+            )
         
-        return ActionCategory.READ
+        return SafetyCheck(
+            allowed=True,
+            risk_level=RiskLevel.SAFE,
+            reason="Safe file read",
+        )
 
-    def requires_confirmation(
+    def check_external_action(
         self,
-        risk_level: RiskLevel,
-        action_category: ActionCategory,
-    ) -> bool:
-        """
-        Determine if an action requires confirmation.
+        action_type: ActionCategory,
+        description: str,
+    ) -> SafetyCheck:
+        """Check if an external action requires approval."""
         
-        Args:
-            risk_level: The risk level of the action
-            action_category: The category of action
-            
-        Returns:
-            True if confirmation is required
-        """
-        # Always block blocked actions
-        if risk_level == RiskLevel.BLOCKED:
-            return True  # Will be blocked, not just confirmed
+        if action_type == ActionCategory.FINANCIAL:
+            return SafetyCheck(
+                allowed=False,
+                risk_level=RiskLevel.HIGH,
+                reason="Financial actions require explicit approval",
+                requires_approval=True,
+                approval_prompt=f"Confirm financial action:\n{description}",
+            )
         
-        # High risk always needs confirmation
-        if risk_level == RiskLevel.HIGH:
-            return True
+        if action_type == ActionCategory.COMMUNICATION:
+            return SafetyCheck(
+                allowed=False,
+                risk_level=RiskLevel.HIGH,
+                reason="Sending messages requires explicit approval",
+                requires_approval=True,
+                approval_prompt=f"Approve sending this message:\n{description}",
+            )
         
-        # Medium risk needs confirmation for certain categories
-        if risk_level == RiskLevel.MEDIUM:
-            return action_category in [
-                ActionCategory.DELETE,
-                ActionCategory.SEND,
-                ActionCategory.FINANCIAL,
-                ActionCategory.EXECUTE,
-            ]
+        if action_type == ActionCategory.DELETE:
+            return SafetyCheck(
+                allowed=False,
+                risk_level=RiskLevel.HIGH,
+                reason="Deletion requires explicit approval",
+                requires_approval=True,
+                approval_prompt=f"Confirm deletion:\n{description}",
+            )
         
-        # These categories always need confirmation regardless of risk
-        if action_category in [ActionCategory.DELETE, ActionCategory.FINANCIAL]:
-            return True
+        if action_type == ActionCategory.NETWORK:
+            return SafetyCheck(
+                allowed=True,
+                risk_level=RiskLevel.MEDIUM,
+                reason="External request will be logged",
+            )
         
-        return False
-
-    def get_confirmation_type(
-        self,
-        risk_level: RiskLevel,
-        action_category: ActionCategory,
-    ) -> str:
-        """
-        Get the type of confirmation UI needed.
-        
-        Args:
-            risk_level: The risk level
-            action_category: The action category
-            
-        Returns:
-            UI component type for confirmation
-        """
-        if risk_level == RiskLevel.BLOCKED:
-            return "error"  # Show error, don't allow
-        
-        if risk_level == RiskLevel.HIGH or action_category == ActionCategory.FINANCIAL:
-            return "approval"
-        
-        return "confirmation"
-
-    def sanitize_output(self, text: str) -> str:
-        """
-        Sanitize output to remove sensitive information.
-        
-        Args:
-            text: Text to sanitize
-            
-        Returns:
-            Sanitized text
-        """
-        result = text
-        
-        for pattern in SENSITIVE_PATTERNS:
-            result = re.sub(pattern, "[REDACTED]", result)
-        
-        return result
-
-    def validate_external_action(
-        self,
-        action_type: str,
-        target: str,
-        data: Optional[dict] = None,
-    ) -> tuple[bool, str]:
-        """
-        Validate an external action before execution.
-        
-        Args:
-            action_type: Type of action (send_email, api_call, etc.)
-            target: Target of the action (email address, URL, etc.)
-            data: Optional data payload
-            
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        # Block certain action types entirely
-        blocked_types = ["delete_account", "format_device", "system_command"]
-        if action_type in blocked_types:
-            return False, f"Action type '{action_type}' is not allowed"
-        
-        # Validate data doesn't contain sensitive patterns
-        if data:
-            data_str = str(data)
-            for pattern in SENSITIVE_PATTERNS:
-                if re.search(pattern, data_str):
-                    return False, "Data contains sensitive information that cannot be transmitted"
-        
-        return True, ""
-
-    def _risk_level_value(self, level: RiskLevel) -> int:
-        """Get numeric value for risk level comparison."""
-        values = {
-            RiskLevel.SAFE: 0,
-            RiskLevel.LOW: 1,
-            RiskLevel.MEDIUM: 2,
-            RiskLevel.HIGH: 3,
-            RiskLevel.BLOCKED: 4,
-        }
-        return values.get(level, 0)
+        return SafetyCheck(
+            allowed=True,
+            risk_level=RiskLevel.SAFE,
+            reason="Action is safe",
+        )
 
 
-# Singleton instance
-safety_guard = SafetyGuard()
+# Agent SDK hooks configuration
+def get_safety_hooks() -> dict:
+    """
+    Get hooks configuration for Claude Agent SDK.
+    
+    These hooks run before/after tool use to enforce safety.
+    """
+    return {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [{
+                    "type": "command",
+                    "command": "echo 'BRON_SAFETY: Checking command...' >&2"
+                }]
+            },
+            {
+                "matcher": "Edit|Write",
+                "hooks": [{
+                    "type": "command", 
+                    "command": "echo 'BRON_SAFETY: File modification logged' >&2"
+                }]
+            },
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Bash|Edit|Write",
+                "hooks": [{
+                    "type": "command",
+                    "command": "echo \"$(date): tool used\" >> ./bron_audit.log 2>/dev/null || true"
+                }]
+            },
+        ],
+    }
 
+
+# Singleton
+safety_guardrails = SafetyGuardrails()

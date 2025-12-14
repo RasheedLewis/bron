@@ -2,8 +2,7 @@
 //  SkillsListView.swift
 //  Bron
 //
-//  List of saved Skills
-//  Placeholder for PR-08 implementation
+//  Skills list - broadcast style
 //
 
 import SwiftUI
@@ -16,31 +15,95 @@ struct SkillsListView: View {
     }
     
     var body: some View {
-        Group {
+        ZStack {
+            BronColors.surface
+                .ignoresSafeArea()
+            
             if skills.isEmpty {
-                ContentUnavailableView {
-                    Label("No Skills Yet", systemImage: "wand.and.stars")
-                } description: {
-                    Text("Save a task as a Skill to reuse it later.")
-                }
+                emptyState
             } else {
-                List(skills) { skill in
-                    NavigationLink(value: skill.id) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(skill.name)
-                                .font(.headline)
-                            Text("\(skill.steps.count) steps")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+                skillsList
             }
         }
-        .navigationTitle("Skills")
+        .navigationTitle("")
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("SKILLS")
+                    .displayStyle(.medium)
+                    .foregroundStyle(BronColors.textPrimary)
+            }
+        }
         .refreshable {
             appState.skillRepository.fetchAll()
         }
+    }
+    
+    // MARK: - Empty State
+    
+    private var emptyState: some View {
+        VStack(spacing: BronLayout.spacingXL) {
+            Image(systemName: "star")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(BronColors.gray300)
+            
+            VStack(spacing: BronLayout.spacingM) {
+                Text("NO SKILLS YET")
+                    .displayStyle(.medium)
+                    .foregroundStyle(BronColors.textPrimary)
+                
+                Text("Save a workflow to reuse it.")
+                    .utilityStyle(.medium)
+                    .foregroundStyle(BronColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, BronLayout.spacingXL)
+            }
+        }
+    }
+    
+    // MARK: - Skills List
+    
+    private var skillsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                BronDivider(weight: BronLayout.dividerThick, color: BronColors.black)
+                    .padding(.horizontal)
+                
+                ForEach(skills) { skill in
+                    SkillRow(skill: skill)
+                    
+                    BronDivider()
+                        .padding(.horizontal)
+                }
+            }
+            .padding(.top, BronLayout.spacingM)
+        }
+    }
+}
+
+// MARK: - Skill Row
+
+struct SkillRow: View {
+    let skill: Skill
+    
+    var body: some View {
+        HStack(spacing: BronLayout.spacingM) {
+            VStack(alignment: .leading, spacing: BronLayout.spacingXS) {
+                Text(skill.name.uppercased())
+                    .displayStyle(.small)
+                    .foregroundStyle(BronColors.textPrimary)
+                
+                Text("\(skill.steps.count) steps")
+                    .utilityStyle(.meta)
+                    .foregroundStyle(BronColors.textMeta)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .foregroundStyle(BronColors.gray300)
+        }
+        .padding(BronLayout.spacingM)
+        .contentShape(Rectangle())
     }
 }
 
@@ -50,4 +113,3 @@ struct SkillsListView: View {
             .environmentObject(AppState(persistenceController: .preview))
     }
 }
-

@@ -2,7 +2,8 @@
 //  StatusPill.swift
 //  Bron
 //
-//  Status indicator pill component
+//  Status indicator - broadcast style
+//  Replaced by BronStatusBadge in theme, kept for compatibility
 //
 
 import SwiftUI
@@ -11,19 +12,12 @@ struct StatusPill: View {
     let status: BronStatus
     
     var body: some View {
-        Text(status.displayName)
-            .font(.caption)
-            .fontWeight(.medium)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(status.color.opacity(0.15))
-            .foregroundStyle(status.color)
-            .clipShape(Capsule())
+        BronStatusBadge(status: status.displayName, showDot: true)
     }
 }
 
 #Preview {
-    VStack(spacing: 8) {
+    VStack(spacing: BronLayout.spacingM) {
         StatusPill(status: .working)
         StatusPill(status: .waiting)
         StatusPill(status: .needsInfo)
@@ -32,4 +26,3 @@ struct StatusPill: View {
     }
     .padding()
 }
-

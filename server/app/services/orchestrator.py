@@ -77,10 +77,11 @@ class TaskOrchestrator:
         self.db.add(user_message)
         await self.db.flush()
         
-        # Process with Claude
+        # Process with Claude (pass bron_id for session continuity)
         try:
             agent_response = await claude_service.process_message(
                 user_message=message_content,
+                bron_id=bron_id,
                 task_context=task_context,
                 conversation_history=history,
             )
@@ -117,18 +118,40 @@ class TaskOrchestrator:
         if not bron:
             raise ValueError(f"Bron not found: {bron_id}")
         
-        # Analyze the task with Claude
-        analysis = await claude_service.analyze_task(message_content)
+        # Get conversation history BEFORE storing current message
+        history = await self._get_conversation_history(bron_id, limit=10)
+        
+        # Store user message
+        user_message = ChatMessage(
+            bron_id=bron_id,
+            role=MessageRole.USER,
+            content=message_content,
+        )
+        self.db.add(user_message)
+        await self.db.flush()
+        
+        # Get Claude's response with conversation context and session
+        agent_response = await claude_service.process_message(
+            user_message=message_content,
+            bron_id=bron_id,
+            conversation_history=history,
+        )
+        analysis = {
+            "category": self._detect_category(message_content),
+            "response": agent_response.message,
+        }
+        
+        # Generate a concise title for the task
+        task_title = self._generate_task_title(message_content)
         
         # Create the task
         task = Task(
-            title=message_content[:100],  # Truncate for title
+            title=task_title,
             description=message_content,
             state=TaskState.DRAFT,
             category=TaskCategory(analysis.get("category", "other")),
             bron_id=bron_id,
             progress=0.0,
-            next_action=analysis.get("first_action"),
         )
         self.db.add(task)
         
@@ -136,52 +159,24 @@ class TaskOrchestrator:
         bron.current_task_id = task.id
         bron.status = BronStatus.WORKING
         
+        # Only update name if it's the default (first task)
+        if bron.name in ("New Bron", "Bron", None, ""):
+            bron.name = task_title
+        
         await self.db.flush()
         
-        # Generate initial response
-        if analysis.get("required_info"):
-            # Need information - generate UI Recipe
-            ui_recipe_spec = await claude_service.generate_ui_recipe(
-                task_context=self._build_task_context(task),
-                missing_info=analysis["required_info"],
-            )
-            
-            # Create UI Recipe
-            ui_recipe = await self._create_ui_recipe(task.id, ui_recipe_spec)
-            
-            # Update task state
-            task.state = TaskState.NEEDS_INFO
-            task.waiting_on = ", ".join(analysis["required_info"][:3])
-            
-            # Create response message with UI Recipe
-            response = ChatMessage(
-                bron_id=bron_id,
-                role=MessageRole.ASSISTANT,
-                content=f"I'll help you with that! To get started, I need some information.",
-                task_state_update=TaskState.NEEDS_INFO.value,
-            )
-            self.db.add(response)
-            
-            # Link UI Recipe to message
-            ui_recipe.message_id = response.id
-            
-            await self.db.flush()
-            await self.db.refresh(response)
-            
-        else:
-            # Can start immediately
-            task.state = TaskState.PLANNED
-            
-            steps_text = "\n".join(f"• {step}" for step in analysis.get("steps", []))
-            response = ChatMessage(
-                bron_id=bron_id,
-                role=MessageRole.ASSISTANT,
-                content=f"I understand! Here's my plan:\n\n{steps_text}\n\nShall I proceed?",
-                task_state_update=TaskState.PLANNED.value,
-            )
-            self.db.add(response)
-            await self.db.flush()
-            await self.db.refresh(response)
+        # Use Claude's actual response
+        task.state = TaskState.PLANNED
+        
+        response = ChatMessage(
+            bron_id=bron_id,
+            role=MessageRole.ASSISTANT,
+            content=analysis.get("response", "I'm on it."),
+            task_state_update=TaskState.PLANNED.value,
+        )
+        self.db.add(response)
+        await self.db.flush()
+        await self.db.refresh(response)
         
         return task, response
 
@@ -272,10 +267,13 @@ class TaskOrchestrator:
         )
         messages = result.scalars().all()
         
-        return [
-            {"role": msg.role.value, "content": msg.content}
-            for msg in reversed(messages)
-        ]
+        history = []
+        for msg in reversed(messages):
+            # Handle both enum and string role values
+            role = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+            history.append({"role": role, "content": msg.content})
+        
+        return history
 
     def _build_task_context(self, task: Task) -> dict:
         """Build task context dictionary."""
@@ -289,6 +287,55 @@ class TaskOrchestrator:
             "next_action": task.next_action,
             "waiting_on": task.waiting_on,
         }
+
+    def _detect_category(self, text: str) -> str:
+        """Simple category detection based on keywords."""
+        text_lower = text.lower()
+        if any(w in text_lower for w in ["email", "calendar", "meeting", "schedule"]):
+            return "admin"
+        if any(w in text_lower for w in ["write", "design", "create", "draw"]):
+            return "creative"
+        if any(w in text_lower for w in ["homework", "study", "class", "exam"]):
+            return "school"
+        if any(w in text_lower for w in ["work", "project", "deadline", "report"]):
+            return "work"
+        return "personal"
+
+    def _generate_task_title(self, message: str) -> str:
+        """Generate a 1-3 word title from the user's message."""
+        text = message.strip().lower()
+        
+        # Remove common filler phrases
+        filler_phrases = [
+            "can you ", "could you ", "please ", "i need to ", "i want to ",
+            "help me ", "i'd like to ", "i would like to ", "let's ",
+            "i need ", "i want ", "help ", "can ", "could ",
+        ]
+        for phrase in filler_phrases:
+            if text.startswith(phrase):
+                text = text[len(phrase):]
+        
+        # Remove trailing punctuation
+        text = text.rstrip('?!.,')
+        
+        # Extract key words (skip common words)
+        skip_words = {
+            'a', 'an', 'the', 'my', 'your', 'to', 'for', 'with', 'and',
+            'or', 'in', 'on', 'at', 'of', 'that', 'this', 'it', 'is',
+            'me', 'some', 'about', 'up', 'out', 'so', 'what', 'how',
+        }
+        
+        words = text.split()
+        key_words = [w for w in words if w not in skip_words][:3]
+        
+        # If we filtered too much, use first 3 words
+        if not key_words:
+            key_words = words[:3]
+        
+        # Capitalize each word
+        title = ' '.join(w.capitalize() for w in key_words)
+        
+        return title or "New Task"
 
     async def _handle_agent_response(
         self,

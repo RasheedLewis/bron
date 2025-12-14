@@ -65,5 +65,12 @@ extension ChatMessageEntity {
         request.fetchLimit = limit
         return request
     }
+    
+    static func fetchById(_ id: UUID) -> NSFetchRequest<ChatMessageEntity> {
+        let request = fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+        return request
+    }
 }
 

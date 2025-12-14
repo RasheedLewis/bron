@@ -13,7 +13,7 @@ import Foundation
 final class TaskRepository: ObservableObject {
     private let context: NSManagedObjectContext
     
-    @Published private(set) var tasks: [Task] = []
+    @Published private(set) var tasks: [BronTask] = []
     
     init(context: NSManagedObjectContext = PersistenceController.shared.viewContext) {
         self.context = context
@@ -34,7 +34,7 @@ final class TaskRepository: ObservableObject {
     }
     
     /// Fetch a single Task by ID
-    func fetch(id: UUID) -> Task? {
+    func fetch(id: UUID) -> BronTask? {
         let request = TaskEntity.fetchById(id)
         do {
             return try context.fetch(request).first?.toTask()
@@ -45,7 +45,7 @@ final class TaskRepository: ObservableObject {
     }
     
     /// Fetch Tasks for a specific Bron
-    func fetchByBron(bronId: UUID) -> [Task] {
+    func fetchByBron(bronId: UUID) -> [BronTask] {
         let request = TaskEntity.fetchByBron(bronId)
         do {
             let entities = try context.fetch(request)
@@ -57,7 +57,7 @@ final class TaskRepository: ObservableObject {
     }
     
     /// Fetch Tasks by state
-    func fetchByState(_ state: TaskState) -> [Task] {
+    func fetchByState(_ state: TaskState) -> [BronTask] {
         let request = TaskEntity.fetchByState(state)
         do {
             let entities = try context.fetch(request)
@@ -70,7 +70,7 @@ final class TaskRepository: ObservableObject {
     
     /// Create a new Task
     @discardableResult
-    func create(title: String, bronId: UUID, category: TaskCategory = .other, description: String? = nil) -> Task? {
+    func create(title: String, bronId: UUID, category: TaskCategory = .other, description: String? = nil) -> BronTask? {
         // Find the Bron entity
         let bronRequest = BronEntity.fetchById(bronId)
         guard let bronEntity = try? context.fetch(bronRequest).first else {
@@ -96,7 +96,7 @@ final class TaskRepository: ObservableObject {
     }
     
     /// Update an existing Task
-    func update(_ task: Task) {
+    func update(_ task: BronTask) {
         let request = TaskEntity.fetchById(task.id)
         do {
             if let entity = try context.fetch(request).first {
@@ -125,7 +125,7 @@ final class TaskRepository: ObservableObject {
     }
     
     /// Delete a Task
-    func delete(_ task: Task) {
+    func delete(_ task: BronTask) {
         let request = TaskEntity.fetchById(task.id)
         do {
             if let entity = try context.fetch(request).first {

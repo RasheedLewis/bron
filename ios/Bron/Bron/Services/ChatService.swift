@@ -6,8 +6,10 @@
 //
 
 import Foundation
+import CoreData
 
 /// Response from Claude agent
+/// Note: APIClient handles snake_case conversion automatically
 struct AgentChatResponse: Codable {
     let id: UUID
     let bronId: UUID
@@ -16,16 +18,6 @@ struct AgentChatResponse: Codable {
     let uiRecipe: UIRecipe?
     let taskStateUpdate: String?
     let createdAt: Date
-    
-    enum CodingKeys: String, CodingKey {
-        case id
-        case bronId = "bron_id"
-        case role
-        case content
-        case uiRecipe = "ui_recipe"
-        case taskStateUpdate = "task_state_update"
-        case createdAt = "created_at"
-    }
     
     /// Convert to ChatMessage
     func toChatMessage() -> ChatMessage {
@@ -56,7 +48,9 @@ actor ChatService {
             let messages: [AgentChatResponse]
             let total: Int
         }
+        print("🌐 Fetching chat history from API for Bron: \(bronId)")
         let response: Response = try await api.get("chat/\(bronId.uuidString)/history?limit=\(limit)&offset=\(offset)")
+        print("🌐 API returned \(response.messages.count) messages (total: \(response.total))")
         return response.messages.map { $0.toChatMessage() }
     }
     
@@ -161,12 +155,25 @@ class ChatViewModel: ObservableObject {
         isLoading = true
         error = nil
         
+        print("📥 Loading chat history for Bron: \(bronId)")
+        
         do {
             // Try API first
-            messages = try await chatService.fetchHistory(bronId: bronId)
+            let apiMessages = try await chatService.fetchHistory(bronId: bronId)
+            print("✅ Loaded \(apiMessages.count) messages from API")
+            messages = apiMessages
+            print("📝 Messages array now has \(messages.count) items")
+            
+            // Cache messages locally for offline access
+            for message in apiMessages {
+                chatRepository.cacheMessage(message, bronId: bronId)
+            }
         } catch {
+            print("❌ Failed to load from API: \(error)")
             // Fall back to local storage
-            messages = chatRepository.fetchMessages(bronId: bronId)
+            let localMessages = chatRepository.fetchMessages(bronId: bronId)
+            print("📦 Loaded \(localMessages.count) messages from local storage")
+            messages = localMessages
             if messages.isEmpty {
                 self.error = "Unable to load chat history"
             }
@@ -197,7 +204,9 @@ class ChatViewModel: ObservableObject {
         do {
             // Send to API
             let response = try await chatService.sendMessage(bronId: bronId, content: content)
+            print("✅ Got response: \(response.content)")
             messages.append(response)
+            print("📝 Messages count: \(messages.count)")
             
             // Check for UI Recipe
             if let recipe = response.uiRecipe {
@@ -220,6 +229,7 @@ class ChatViewModel: ObservableObject {
                 )
             }
         } catch {
+            print("❌ Send message error: \(error)")
             self.error = "Failed to send message"
             // Remove optimistic message
             messages.removeLast()

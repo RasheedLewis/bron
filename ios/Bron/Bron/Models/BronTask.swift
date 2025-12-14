@@ -1,14 +1,14 @@
 //
-//  Task.swift
+//  BronTask.swift
 //  Bron
 //
-//  Task model
+//  Task model (named BronTask to avoid collision with Swift's Task)
 //
 
 import Foundation
 
 /// Represents a task being worked on by a Bron
-struct Task: Identifiable, Codable, Hashable {
+struct BronTask: Identifiable, Codable, Hashable {
     let id: UUID
     var title: String
     var description: String?
@@ -95,9 +95,9 @@ enum TaskCategory: String, Codable, CaseIterable {
 
 // MARK: - Preview Helpers
 
-extension Task {
-    static var preview: Task {
-        Task(
+extension BronTask {
+    static var preview: BronTask {
+        BronTask(
             title: "Submit expense receipt",
             description: "Submit the lunch receipt from yesterday",
             state: .needsInfo,

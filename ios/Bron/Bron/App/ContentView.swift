@@ -2,32 +2,36 @@
 //  ContentView.swift
 //  Bron
 //
-//  Main content view with tab navigation
+//  Main navigation - championship broadcast style
 //
 
 import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
+    @State private var selectedTab = 0
     
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             BronListView()
                 .tabItem {
-                    Label("Brons", systemImage: "person.3.fill")
+                    Label("BRONS", systemImage: "person.3")
                 }
+                .tag(0)
             
             TaskSpreadsheetView()
                 .tabItem {
-                    Label("Tasks", systemImage: "list.bullet.rectangle")
+                    Label("TASKS", systemImage: "list.bullet")
                 }
+                .tag(1)
             
             SettingsView()
                 .tabItem {
-                    Label("Settings", systemImage: "gear")
+                    Label("SETTINGS", systemImage: "gear")
                 }
+                .tag(2)
         }
-        .tint(.primary)
+        .tint(BronColors.black)
     }
 }
 
@@ -35,4 +39,3 @@ struct ContentView: View {
     ContentView()
         .environmentObject(AppState(persistenceController: .preview))
 }
-

@@ -30,8 +30,8 @@ public class TaskEntity: NSManagedObject {
 
 extension TaskEntity {
     /// Convert to value type
-    func toTask() -> Task {
-        Task(
+    func toTask() -> BronTask {
+        BronTask(
             id: id,
             title: title,
             description: taskDescription,
@@ -47,7 +47,7 @@ extension TaskEntity {
     }
     
     /// Update from value type
-    func update(from task: Task) {
+    func update(from task: BronTask) {
         title = task.title
         taskDescription = task.description
         state = task.state.rawValue

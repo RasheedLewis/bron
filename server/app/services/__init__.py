@@ -2,7 +2,7 @@
 
 from app.services.claude import (
     claude_service,
-    ClaudeService,
+    ClaudeAgentService,
     AgentResponse,
     AgentIntent,
     UIRecipeSpec,
@@ -10,8 +10,8 @@ from app.services.claude import (
 )
 from app.services.orchestrator import TaskOrchestrator
 from app.services.safety import (
-    safety_guard,
-    SafetyGuard,
+    safety_guardrails,
+    SafetyGuardrails,
     RiskLevel,
     ActionCategory,
 )
@@ -19,7 +19,7 @@ from app.services.safety import (
 __all__ = [
     # Claude
     "claude_service",
-    "ClaudeService",
+    "ClaudeAgentService",
     "AgentResponse",
     "AgentIntent",
     "UIRecipeSpec",
@@ -27,8 +27,8 @@ __all__ = [
     # Orchestrator
     "TaskOrchestrator",
     # Safety
-    "safety_guard",
-    "SafetyGuard",
+    "safety_guardrails",
+    "SafetyGuardrails",
     "RiskLevel",
     "ActionCategory",
 ]

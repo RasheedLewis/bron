@@ -2,7 +2,8 @@
 //  BronDetailView.swift
 //  Bron
 //
-//  Chat-based interaction with a single Bron
+//  Chat Workspace - championship broadcast style
+//  Calm, neutral, feels like notes between teammates
 //
 
 import SwiftUI
@@ -10,6 +11,7 @@ import SwiftUI
 struct BronDetailView: View {
     let bronId: UUID
     
+    @EnvironmentObject var appState: AppState
     @StateObject private var viewModel: ChatViewModel
     @State private var inputText: String = ""
     @State private var isTaskDrawerOpen: Bool = false
@@ -20,100 +22,224 @@ struct BronDetailView: View {
         _viewModel = StateObject(wrappedValue: ChatViewModel(bronId: bronId))
     }
     
+    private var currentTaskState: String? {
+        viewModel.messages.last?.taskStateUpdate
+    }
+    
+    private var suggestions: [Suggestion] {
+        Suggestion.contextual(for: currentTaskState)
+    }
+    
+    private var avatarState: AvatarState {
+        AvatarState.from(taskState: currentTaskState)
+    }
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // Messages
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(viewModel.messages) { message in
-                            MessageBubble(message: message)
-                                .id(message.id)
-                        }
-                        
-                        // Loading indicator
-                        if viewModel.isLoading {
-                            HStack {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("Thinking...")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal)
-                        }
-                    }
-                    .padding()
-                }
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo(viewModel.messages.last?.id, anchor: .bottom)
-                    }
-                }
-            }
+        ZStack {
+            BronColors.surface
+                .ignoresSafeArea()
             
-            // Pending UI Recipe
-            if let recipe = viewModel.pendingRecipe {
-                PendingRecipeView(
-                    recipe: recipe,
-                    onSubmit: { data in
-                        Task {
-                            await viewModel.submitRecipe(data)
-                        }
+            VStack(spacing: 0) {
+                // Messages
+                messagesView
+                
+                // Error banner
+                errorBanner
+                
+                // Composer
+                MessageComposer(
+                    text: $inputText,
+                    onSend: sendMessage,
+                    suggestions: inputText.isEmpty ? suggestions : nil,
+                    onSuggestionTap: { suggestion in
+                        inputText = suggestion.text
+                        sendMessage()
                     },
-                    onDismiss: {
-                        viewModel.dismissRecipe()
-                    }
+                    isLoading: viewModel.isLoading,
+                    placeholder: "Message \(bronName)..."
                 )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .focused($isInputFocused)
             }
-            
-            // Error banner
-            if let error = viewModel.error {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(error)
-                        .font(.caption)
-                    Spacer()
-                    Button("Dismiss") {
-                        viewModel.error = nil
-                    }
-                    .font(.caption)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.1))
-            }
-            
-            Divider()
-            
-            // Composer
-            MessageComposer(text: $inputText) {
-                sendMessage()
-            }
-            .focused($isInputFocused)
-            .disabled(viewModel.isLoading)
         }
-        .navigationTitle("Bron")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: BronLayout.spacingS) {
+                    BronAvatar(size: .small, state: avatarState, isAnimated: false)
+                    
+                    Text(bronName.uppercased())
+                        .displayStyle(.small)
+                        .foregroundStyle(BronColors.textPrimary)
+                }
+            }
+            
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     isTaskDrawerOpen.toggle()
                 } label: {
-                    Image(systemName: "sidebar.right")
+                    Image(systemName: "square.split.2x1")
+                        .foregroundStyle(BronColors.textPrimary)
                 }
             }
         }
         .sheet(isPresented: $isTaskDrawerOpen) {
             TaskDrawer(bronId: bronId)
-                .presentationDetents([.medium, .large])
+                .environmentObject(appState)
         }
         .task {
             await viewModel.loadHistory()
         }
+    }
+    
+    // MARK: - Messages View
+    
+    private var messagesView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: BronLayout.spacingL) {
+                    // Welcome message
+                    if viewModel.messages.isEmpty && !viewModel.isLoading {
+                        welcomeView
+                    }
+                    
+                    // Messages
+                    ForEach(viewModel.messages) { message in
+                        MessageBubble(
+                            message: message,
+                            onRecipeAction: handleRecipeAction,
+                            onRecipeSubmit: handleRecipeSubmit
+                        )
+                        .id(message.id)
+                    }
+                    
+                    // Typing indicator
+                    if viewModel.isLoading {
+                        typingIndicator
+                            .id("typing")
+                    }
+                    
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottom")
+                }
+                .padding(BronLayout.spacingM)
+            }
+            .onChange(of: viewModel.messages.count) { _, _ in
+                withAnimation {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Welcome View
+    
+    private var welcomeView: some View {
+        VStack(spacing: BronLayout.spacingXL) {
+            Spacer()
+                .frame(height: 40)
+            
+            BronAvatar(size: .hero, state: .idle)
+            
+            VStack(spacing: BronLayout.spacingM) {
+                Text(bronName.uppercased())
+                    .displayStyle(.large)
+                    .foregroundStyle(BronColors.textPrimary)
+                
+                Text("What do you need done?")
+                    .utilityStyle(.medium)
+                    .foregroundStyle(BronColors.textSecondary)
+            }
+            
+            // Quick start
+            VStack(spacing: BronLayout.spacingS) {
+                ForEach(quickStartSuggestions, id: \.self) { suggestion in
+                    Button {
+                        inputText = suggestion
+                    } label: {
+                        Text(suggestion)
+                            .utilityStyle(.medium)
+                            .foregroundStyle(BronColors.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(BronLayout.spacingM)
+                            .background(BronColors.gray050)
+                            .overlay(
+                                Rectangle()
+                                    .strokeBorder(BronColors.gray300, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, BronLayout.spacingXL)
+            
+            Spacer()
+        }
+    }
+    
+    private var quickStartSuggestions: [String] {
+        [
+            "Submit my expense receipt",
+            "Plan my study schedule",
+            "Draft an email",
+        ]
+    }
+    
+    // MARK: - Typing Indicator
+    
+    private var typingIndicator: some View {
+        HStack(spacing: BronLayout.spacingM) {
+            BronAvatar(size: .small, state: .thinking, isAnimated: true)
+            
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle()
+                        .fill(BronColors.gray500)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, BronLayout.spacingM)
+            .padding(.vertical, BronLayout.spacingS)
+            .background(BronColors.gray050)
+            
+            Spacer()
+        }
+    }
+    
+    // MARK: - Error Banner
+    
+    @ViewBuilder
+    private var errorBanner: some View {
+        if let error = viewModel.error {
+            HStack(spacing: BronLayout.spacingS) {
+                Text(error)
+                    .utilityStyle(.small)
+                    .foregroundStyle(BronColors.textSecondary)
+                
+                Spacer()
+                
+                Button {
+                    viewModel.error = nil
+                } label: {
+                    Text("DISMISS")
+                        .font(BronTypography.meta)
+                        .foregroundStyle(BronColors.textMeta)
+                }
+            }
+            .padding(BronLayout.spacingM)
+            .background(BronColors.gray050)
+            .overlay(
+                Rectangle()
+                    .strokeBorder(BronColors.gray300, lineWidth: 1)
+            )
+        }
+    }
+    
+    // MARK: - Helpers
+    
+    private var bronName: String {
+        appState.bronRepository.brons.first { $0.id == bronId }?.name ?? "Bron"
     }
     
     private func sendMessage() {
@@ -127,90 +253,14 @@ struct BronDetailView: View {
             await viewModel.sendMessage(content)
         }
     }
-}
-
-// MARK: - Pending Recipe View
-
-struct PendingRecipeView: View {
-    let recipe: UIRecipe
-    let onSubmit: ([String: String]) -> Void
-    let onDismiss: () -> Void
     
-    @State private var formData: [String: String] = [:]
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text(recipe.title ?? "Information Needed")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    onDismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            
-            Divider()
-            
-            // Form fields (simplified - will be expanded in PR-04)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let description = recipe.description {
-                        Text(description)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    ForEach(Array(recipe.schema.keys.sorted()), id: \.self) { key in
-                        if let field = recipe.schema[key] {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(field.label ?? key.capitalized)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                
-                                TextField(
-                                    field.placeholder ?? "",
-                                    text: Binding(
-                                        get: { formData[key] ?? "" },
-                                        set: { formData[key] = $0 }
-                                    )
-                                )
-                                .textFieldStyle(.roundedBorder)
-                            }
-                        }
-                    }
-                }
-                .padding()
-            }
-            
-            Divider()
-            
-            // Submit button
-            Button {
-                onSubmit(formData)
-            } label: {
-                Text("Submit")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!isFormValid)
-            .padding()
-        }
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(radius: 10)
-        .padding()
+    private func handleRecipeAction(_ action: String) {
+        print("Recipe action: \(action)")
     }
     
-    private var isFormValid: Bool {
-        recipe.requiredFields.allSatisfy { field in
-            let value = formData[field] ?? ""
-            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private func handleRecipeSubmit(_ data: [String: String]) {
+        Task {
+            await viewModel.submitRecipe(data)
         }
     }
 }
@@ -218,5 +268,6 @@ struct PendingRecipeView: View {
 #Preview {
     NavigationStack {
         BronDetailView(bronId: UUID())
+            .environmentObject(AppState(persistenceController: .preview))
     }
 }

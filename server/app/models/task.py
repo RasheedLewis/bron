@@ -73,7 +73,11 @@ class Task(Base, UUIDMixin, TimestampMixin):
     
     # Relationships
     bron_id: Mapped[UUID] = mapped_column(ForeignKey("brons.id"), nullable=False)
-    bron: Mapped["BronInstance"] = relationship("BronInstance", back_populates="tasks")
+    bron: Mapped["BronInstance"] = relationship(
+        "BronInstance",
+        back_populates="tasks",
+        foreign_keys=[bron_id],
+    )
     
     # UI Recipes generated for this task
     ui_recipes: Mapped[list["UIRecipe"]] = relationship(

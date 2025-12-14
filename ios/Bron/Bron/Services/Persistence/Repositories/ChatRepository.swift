@@ -111,6 +111,57 @@ final class ChatRepository: ObservableObject {
         return false
     }
     
+    /// Cache a message from the API
+    func cacheMessage(_ message: ChatMessage, bronId: UUID) {
+        // Check if message already exists
+        let existingRequest = ChatMessageEntity.fetchById(message.id)
+        if let existing = try? context.fetch(existingRequest), !existing.isEmpty {
+            return // Already cached
+        }
+        
+        // Find or create BronEntity (ensure Bron exists in Core Data)
+        let bronRequest = BronEntity.fetchById(bronId)
+        let bronEntity: BronEntity
+        if let existing = try? context.fetch(bronRequest).first {
+            bronEntity = existing
+        } else {
+            // Create a placeholder Bron entity
+            bronEntity = BronEntity(context: context)
+            bronEntity.id = bronId
+            bronEntity.name = "Bron"
+            bronEntity.status = "idle"
+            bronEntity.createdAt = Date()
+            bronEntity.updatedAt = Date()
+        }
+        
+        // Create message entity
+        let entity = ChatMessageEntity(context: context)
+        entity.id = message.id
+        entity.role = message.role.rawValue
+        entity.content = message.content
+        entity.taskStateUpdate = message.taskStateUpdate
+        entity.createdAt = message.createdAt
+        entity.bron = bronEntity
+        
+        // Cache UI Recipe if present
+        if let recipe = message.uiRecipe {
+            let recipeEntity = UIRecipeEntity(context: context)
+            recipeEntity.id = recipe.id
+            recipeEntity.componentType = recipe.componentType.rawValue
+            recipeEntity.title = recipe.title
+            recipeEntity.recipeDescription = recipe.description
+            recipeEntity.isSubmitted = false
+            recipeEntity.createdAt = Date()
+            recipeEntity.updatedAt = Date()
+            recipeEntity.message = entity
+            recipeEntity.schemaData = try? JSONEncoder().encode(recipe.schema)
+            recipeEntity.requiredFieldsData = try? JSONEncoder().encode(recipe.requiredFields)
+            entity.uiRecipe = recipeEntity
+        }
+        
+        save()
+    }
+    
     // MARK: - Helpers
     
     private func save() {
