@@ -115,8 +115,17 @@ final class ChatRepository: ObservableObject {
     func cacheMessage(_ message: ChatMessage, bronId: UUID) {
         // Check if message already exists
         let existingRequest = ChatMessageEntity.fetchById(message.id)
-        if let existing = try? context.fetch(existingRequest), !existing.isEmpty {
-            return // Already cached
+        if let existingMessages = try? context.fetch(existingRequest), let existingMessage = existingMessages.first {
+            // Update existing message's UI Recipe if present
+            if let recipe = message.uiRecipe, let recipeEntity = existingMessage.uiRecipe {
+                recipeEntity.isSubmitted = recipe.isSubmitted
+                if let submitted = recipe.submittedData {
+                    recipeEntity.submittedData = try? JSONEncoder().encode(submitted)
+                }
+                recipeEntity.updatedAt = Date()
+            }
+            save()
+            return
         }
         
         // Find or create BronEntity (ensure Bron exists in Core Data)
@@ -150,12 +159,15 @@ final class ChatRepository: ObservableObject {
             recipeEntity.componentType = recipe.componentType.rawValue
             recipeEntity.title = recipe.title
             recipeEntity.recipeDescription = recipe.description
-            recipeEntity.isSubmitted = false
+            recipeEntity.isSubmitted = recipe.isSubmitted
             recipeEntity.createdAt = Date()
             recipeEntity.updatedAt = Date()
             recipeEntity.message = entity
             recipeEntity.schemaData = try? JSONEncoder().encode(recipe.schema)
             recipeEntity.requiredFieldsData = try? JSONEncoder().encode(recipe.requiredFields)
+            if let submitted = recipe.submittedData {
+                recipeEntity.submittedData = try? JSONEncoder().encode(submitted)
+            }
             entity.uiRecipe = recipeEntity
         }
         

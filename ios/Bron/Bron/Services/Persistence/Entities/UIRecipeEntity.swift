@@ -37,7 +37,9 @@ extension UIRecipeEntity {
             schema: decodeSchema() ?? [:],
             requiredFields: decodeRequiredFields() ?? [],
             title: title,
-            description: recipeDescription
+            description: recipeDescription,
+            isSubmitted: isSubmitted,
+            submittedData: decodeSubmittedData()
         )
     }
     
@@ -48,6 +50,10 @@ extension UIRecipeEntity {
         recipeDescription = recipe.description
         encodeSchema(recipe.schema)
         encodeRequiredFields(recipe.requiredFields)
+        isSubmitted = recipe.isSubmitted
+        if let data = recipe.submittedData {
+            encodeSubmittedData(data)
+        }
         updatedAt = Date()
     }
     
@@ -69,6 +75,15 @@ extension UIRecipeEntity {
     
     private func encodeRequiredFields(_ fields: [String]) {
         requiredFieldsData = try? JSONEncoder().encode(fields)
+    }
+    
+    private func decodeSubmittedData() -> [String: String]? {
+        guard let data = submittedData else { return nil }
+        return try? JSONDecoder().decode([String: String].self, from: data)
+    }
+    
+    private func encodeSubmittedData(_ data: [String: String]) {
+        submittedData = try? JSONEncoder().encode(data)
     }
 }
 

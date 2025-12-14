@@ -50,7 +50,9 @@ async def message_to_response(db: AsyncSession, message: ChatMessage) -> Message
             "schema": recipe.schema,
             "required_fields": recipe.required_fields,
             "is_submitted": recipe.is_submitted,
+            "submitted_data": recipe.submitted_data,
             "created_at": recipe.created_at,
+            "updated_at": recipe.updated_at,
         }
     
     return MessageResponse(**response_data)
@@ -114,7 +116,9 @@ async def get_chat_history(
                 "schema": m.ui_recipe.schema,
                 "required_fields": m.ui_recipe.required_fields,
                 "is_submitted": m.ui_recipe.is_submitted,
+                "submitted_data": m.ui_recipe.submitted_data,
                 "created_at": m.ui_recipe.created_at,
+                "updated_at": m.ui_recipe.updated_at,
             }
         message_responses.append(MessageResponse(**response_data))
     
@@ -258,9 +262,11 @@ async def submit_ui_recipe(
     
     Processes the submitted data and continues the task workflow.
     """
-    # Find the UI Recipe
+    # Find the UI Recipe with eager loading of relationships
     result = await db.execute(
-        select(UIRecipe).where(UIRecipe.id == request.recipe_id)
+        select(UIRecipe)
+        .options(selectinload(UIRecipe.message), selectinload(UIRecipe.task))
+        .where(UIRecipe.id == request.recipe_id)
     )
     recipe = result.scalar_one_or_none()
     
@@ -269,6 +275,9 @@ async def submit_ui_recipe(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="UI Recipe not found",
         )
+    
+    # Get bron_id now while relationships are loaded
+    bron_id = recipe.message.bron_id if recipe.message else (recipe.task.bron_id if recipe.task else None)
     
     if recipe.is_submitted:
         raise HTTPException(
@@ -288,8 +297,11 @@ async def submit_ui_recipe(
         import logging
         logging.error(f"Failed to process UI Recipe submission: {e}")
         
-        # Get bron_id from recipe
-        bron_id = recipe.message.bron_id if recipe.message else recipe.task.bron_id
+        if not bron_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not determine Bron for this recipe",
+            )
         
         response = ChatMessage(
             bron_id=bron_id,

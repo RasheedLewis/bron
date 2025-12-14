@@ -65,12 +65,28 @@ struct BronDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: BronLayout.spacingS) {
-                    BronAvatar(size: .small, state: avatarState, isAnimated: false)
+                // Control-room header: Avatar + Name + Status
+                HStack(spacing: BronLayout.spacingM) {
+                    // Fixed avatar presence
+                    BronAvatar(size: .small, state: avatarState, isAnimated: viewModel.isLoading)
                     
-                    Text(bronName.uppercased())
-                        .displayStyle(.small)
-                        .foregroundStyle(BronColors.textPrimary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(bronName.uppercased())
+                            .font(BronTypography.meta)
+                            .fontWeight(.bold)
+                            .foregroundStyle(BronColors.textPrimary)
+                            .tracking(1)
+                        
+                        // Task status indicator
+                        if let state = currentTaskState {
+                            Text(formatTaskState(state).uppercased())
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(statusColor(for: state))
+                                .tracking(0.5)
+                        }
+                    }
+                    
+                    Spacer()
                 }
             }
             
@@ -97,18 +113,17 @@ struct BronDetailView: View {
     private var messagesView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: BronLayout.spacingL) {
+                LazyVStack(spacing: BronLayout.spacingXL) {
                     // Welcome message
                     if viewModel.messages.isEmpty && !viewModel.isLoading {
                         welcomeView
                     }
                     
-                    // Messages
+                    // Messages - alternating user bubbles and Bron panels
                     ForEach(viewModel.messages) { message in
                         MessageBubble(
                             message: message,
-                            onRecipeAction: handleRecipeAction,
-                            onRecipeSubmit: handleRecipeSubmit
+                            onRecipeAction: handleRecipeAction
                         )
                         .id(message.id)
                     }
@@ -123,7 +138,7 @@ struct BronDetailView: View {
                         .frame(height: 1)
                         .id("bottom")
                 }
-                .padding(BronLayout.spacingM)
+                .padding(.vertical, BronLayout.spacingM)
             }
             .onChange(of: viewModel.messages.count) { _, _ in
                 withAnimation {
@@ -189,10 +204,13 @@ struct BronDetailView: View {
     // MARK: - Typing Indicator
     
     private var typingIndicator: some View {
-        HStack(spacing: BronLayout.spacingM) {
-            BronAvatar(size: .small, state: .thinking, isAnimated: true)
+        VStack(alignment: .leading, spacing: BronLayout.spacingS) {
+            // Divider
+            Rectangle()
+                .fill(BronColors.gray150)
+                .frame(height: 1)
             
-            HStack(spacing: 4) {
+            HStack(spacing: BronLayout.spacingS) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle()
                         .fill(BronColors.gray500)
@@ -254,13 +272,54 @@ struct BronDetailView: View {
         }
     }
     
-    private func handleRecipeAction(_ action: String) {
-        print("Recipe action: \(action)")
+    private func handleRecipeAction(_ action: RecipeAction, data: [String: String]?) {
+        print("Recipe action: \(action.rawValue)")
+        
+        Task {
+            switch action {
+            case .submit:
+                if let formData = data {
+                    await viewModel.submitRecipe(formData)
+                }
+            case .confirm, .approve, .execute:
+                // Send confirmation to backend
+                await viewModel.submitRecipe(["action": action.rawValue])
+            case .auth:
+                // Handle authentication flow
+                print("Auth requested")
+            case .skip:
+                // Defer/skip the recipe
+                print("Recipe skipped")
+            case .cancel:
+                // Dismiss the recipe
+                print("Recipe cancelled")
+            }
+        }
     }
     
-    private func handleRecipeSubmit(_ data: [String: String]) {
-        Task {
-            await viewModel.submitRecipe(data)
+    // MARK: - Status Helpers
+    
+    private func formatTaskState(_ state: String) -> String {
+        switch state {
+        case "draft": return "Starting"
+        case "needs_info": return "Waiting"
+        case "planned": return "Planned"
+        case "ready": return "Ready"
+        case "executing": return "Executing"
+        case "waiting": return "Waiting"
+        case "done": return "Complete"
+        case "failed": return "Issue"
+        default: return state
+        }
+    }
+    
+    private func statusColor(for state: String) -> Color {
+        switch state {
+        case "done": return BronColors.commit
+        case "executing", "ready": return BronColors.commit
+        case "needs_info", "waiting": return BronColors.textSecondary
+        case "failed": return BronColors.textSecondary
+        default: return BronColors.textMeta
         }
     }
 }

@@ -8,6 +8,8 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -168,15 +170,31 @@ class TaskOrchestrator:
         # Use Claude's actual response
         task.state = TaskState.PLANNED
         
+        # If Claude requested info via UI Recipe, set task to NEEDS_INFO
+        if agent_response.ui_recipe:
+            task.state = TaskState.NEEDS_INFO
+            if agent_response.ui_recipe.title:
+                task.waiting_on = agent_response.ui_recipe.title
+        
+        task_state_str = task.state.value if hasattr(task.state, 'value') else task.state
         response = ChatMessage(
             bron_id=bron_id,
             role=MessageRole.ASSISTANT,
             content=analysis.get("response", "I'm on it."),
-            task_state_update=TaskState.PLANNED.value,
+            task_state_update=task_state_str,
         )
         self.db.add(response)
         await self.db.flush()
         await self.db.refresh(response)
+        
+        # Create UI Recipe if Claude requested one
+        if agent_response.ui_recipe:
+            await self._create_ui_recipe(
+                task_id=task.id,
+                spec=agent_response.ui_recipe,
+                message_id=response.id,
+            )
+            logger.info(f"✅ Created UI Recipe: {agent_response.ui_recipe.title}")
         
         return task, response
 
@@ -195,9 +213,12 @@ class TaskOrchestrator:
         Returns:
             The assistant's response message
         """
-        # Get the UI Recipe
+        # Get the UI Recipe with eager loading
+        from sqlalchemy.orm import selectinload
         result = await self.db.execute(
-            select(UIRecipe).where(UIRecipe.id == recipe_id)
+            select(UIRecipe)
+            .options(selectinload(UIRecipe.task), selectinload(UIRecipe.message))
+            .where(UIRecipe.id == recipe_id)
         )
         recipe = result.scalar_one_or_none()
         
@@ -208,16 +229,53 @@ class TaskOrchestrator:
         recipe.submitted_data = submitted_data
         recipe.is_submitted = True
         
-        # Get the associated task
+        # Get the associated task and bron_id (relationships already loaded)
         task = recipe.task
-        bron_id = recipe.message.bron_id if recipe.message else task.bron_id
+        bron_id = recipe.message.bron_id if recipe.message else (task.bron_id if task else None)
         
-        # Process the submission with Claude
-        message_content = f"User submitted: {submitted_data}"
+        if not bron_id:
+            raise ValueError("Could not determine Bron ID for recipe submission")
+        
+        # Get all previously submitted data from this task's UI Recipes
+        all_submitted_data = {}
+        if task:
+            submitted_recipes = await self.db.execute(
+                select(UIRecipe).where(
+                    UIRecipe.task_id == task.id,
+                    UIRecipe.is_submitted == True
+                )
+            )
+            for prev_recipe in submitted_recipes.scalars().all():
+                if prev_recipe.submitted_data:
+                    import json
+                    try:
+                        prev_data = json.loads(prev_recipe.submitted_data) if isinstance(prev_recipe.submitted_data, str) else prev_recipe.submitted_data
+                        all_submitted_data.update(prev_data)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+        
+        # Add current submission
+        all_submitted_data.update(submitted_data)
+        
+        # Get conversation history
+        history = await self._get_conversation_history(bron_id, limit=10)
+        
+        # Build comprehensive message with all collected data
+        message_content = f"""User has provided the following information for their task:
+
+{all_submitted_data}
+
+Based on this information, either:
+1. If you have enough info to proceed, provide a helpful response or plan (do NOT ask for more info)
+2. If critical information is still missing that prevents you from helping, use the request_user_input tool to ask for ONLY the missing essentials
+
+Do NOT ask for information that has already been provided above."""
         
         agent_response = await claude_service.process_message(
             user_message=message_content,
+            bron_id=bron_id,
             task_context=self._build_task_context(task) if task else None,
+            conversation_history=history,
         )
         
         # Get Bron for response handling
@@ -277,12 +335,15 @@ class TaskOrchestrator:
 
     def _build_task_context(self, task: Task) -> dict:
         """Build task context dictionary."""
+        # Handle both enum and string values for state/category
+        state_val = task.state.value if hasattr(task.state, 'value') else task.state
+        category_val = task.category.value if hasattr(task.category, 'value') else task.category
         return {
             "id": str(task.id),
             "title": task.title,
             "description": task.description,
-            "state": task.state.value,
-            "category": task.category.value,
+            "state": state_val,
+            "category": category_val,
             "progress": task.progress,
             "next_action": task.next_action,
             "waiting_on": task.waiting_on,
@@ -363,18 +424,28 @@ class TaskOrchestrator:
                 task.progress = 1.0
         elif response.intent == AgentIntent.REQUEST_INFO:
             bron.status = BronStatus.NEEDS_INFO
+            if task:
+                task.state = TaskState.NEEDS_INFO
+                # If UI Recipe has a title, use it for waiting_on
+                if response.ui_recipe and response.ui_recipe.title:
+                    task.waiting_on = response.ui_recipe.title
         elif response.intent == AgentIntent.EXECUTE:
             bron.status = BronStatus.READY
+            if task:
+                task.state = TaskState.READY
         elif response.intent == AgentIntent.ERROR:
             if task:
                 task.state = TaskState.FAILED
         
         # Create assistant message
+        task_state_str = None
+        if task:
+            task_state_str = task.state.value if hasattr(task.state, 'value') else task.state
         assistant_message = ChatMessage(
             bron_id=bron.id,
             role=MessageRole.ASSISTANT,
             content=response.message,
-            task_state_update=task.state.value if task else None,
+            task_state_update=task_state_str,
         )
         self.db.add(assistant_message)
         await self.db.flush()

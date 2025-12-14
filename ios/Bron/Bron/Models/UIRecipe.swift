@@ -17,6 +17,10 @@ struct UIRecipe: Identifiable, Codable, Hashable {
     var description: String?
     var style: UIStyle?
     
+    // Submission state
+    var isSubmitted: Bool
+    var submittedData: [String: String]?
+    
     init(
         id: UUID = UUID(),
         componentType: UIComponentType,
@@ -24,7 +28,9 @@ struct UIRecipe: Identifiable, Codable, Hashable {
         requiredFields: [String] = [],
         title: String? = nil,
         description: String? = nil,
-        style: UIStyle? = nil
+        style: UIStyle? = nil,
+        isSubmitted: Bool = false,
+        submittedData: [String: String]? = nil
     ) {
         self.id = id
         self.componentType = componentType
@@ -33,6 +39,8 @@ struct UIRecipe: Identifiable, Codable, Hashable {
         self.title = title
         self.description = description
         self.style = style
+        self.isSubmitted = isSubmitted
+        self.submittedData = submittedData
     }
 }
 
@@ -326,7 +334,24 @@ extension UIRecipe {
             ],
             requiredFields: ["amount", "date"],
             title: "Receipt Details",
-            description: "Please provide the receipt information"
+            description: "Please provide the receipt information",
+            isSubmitted: false
+        )
+    }
+    
+    static var submittedPreview: UIRecipe {
+        UIRecipe(
+            componentType: .form,
+            schema: [
+                "amount": SchemaField(type: .number, label: "Amount", placeholder: "0.00"),
+                "date": SchemaField(type: .date, label: "Receipt Date"),
+                "category": SchemaField(type: .select, label: "Category", options: ["Food", "Transport", "Office"])
+            ],
+            requiredFields: ["amount", "date"],
+            title: "Receipt Details",
+            description: "Please provide the receipt information",
+            isSubmitted: true,
+            submittedData: ["amount": "125.50", "date": "2024-01-15", "category": "Food"]
         )
     }
 }
