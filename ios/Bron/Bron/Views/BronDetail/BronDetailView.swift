@@ -10,9 +10,15 @@ import SwiftUI
 struct BronDetailView: View {
     let bronId: UUID
     
-    @State private var messages: [ChatMessage] = []
+    @StateObject private var viewModel: ChatViewModel
     @State private var inputText: String = ""
     @State private var isTaskDrawerOpen: Bool = false
+    @FocusState private var isInputFocused: Bool
+    
+    init(bronId: UUID) {
+        self.bronId = bronId
+        _viewModel = StateObject(wrappedValue: ChatViewModel(bronId: bronId))
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -20,12 +26,65 @@ struct BronDetailView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(messages) { message in
+                        ForEach(viewModel.messages) { message in
                             MessageBubble(message: message)
+                                .id(message.id)
+                        }
+                        
+                        // Loading indicator
+                        if viewModel.isLoading {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("Thinking...")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
                         }
                     }
                     .padding()
                 }
+                .onChange(of: viewModel.messages.count) { _, _ in
+                    withAnimation {
+                        proxy.scrollTo(viewModel.messages.last?.id, anchor: .bottom)
+                    }
+                }
+            }
+            
+            // Pending UI Recipe
+            if let recipe = viewModel.pendingRecipe {
+                PendingRecipeView(
+                    recipe: recipe,
+                    onSubmit: { data in
+                        Task {
+                            await viewModel.submitRecipe(data)
+                        }
+                    },
+                    onDismiss: {
+                        viewModel.dismissRecipe()
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            
+            // Error banner
+            if let error = viewModel.error {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(error)
+                        .font(.caption)
+                    Spacer()
+                    Button("Dismiss") {
+                        viewModel.error = nil
+                    }
+                    .font(.caption)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.1))
             }
             
             Divider()
@@ -34,6 +93,8 @@ struct BronDetailView: View {
             MessageComposer(text: $inputText) {
                 sendMessage()
             }
+            .focused($isInputFocused)
+            .disabled(viewModel.isLoading)
         }
         .navigationTitle("Bron")
         .navigationBarTitleDisplayMode(.inline)
@@ -50,22 +111,107 @@ struct BronDetailView: View {
             TaskDrawer(bronId: bronId)
                 .presentationDetents([.medium, .large])
         }
+        .task {
+            await viewModel.loadHistory()
+        }
     }
     
     private func sendMessage() {
-        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return }
         
-        let message = ChatMessage(
-            id: UUID(),
-            bronId: bronId,
-            role: .user,
-            content: inputText,
-            createdAt: Date()
-        )
-        messages.append(message)
         inputText = ""
+        isInputFocused = false
         
-        // TODO: Send to server and get response
+        Task {
+            await viewModel.sendMessage(content)
+        }
+    }
+}
+
+// MARK: - Pending Recipe View
+
+struct PendingRecipeView: View {
+    let recipe: UIRecipe
+    let onSubmit: ([String: String]) -> Void
+    let onDismiss: () -> Void
+    
+    @State private var formData: [String: String] = [:]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text(recipe.title ?? "Information Needed")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            
+            Divider()
+            
+            // Form fields (simplified - will be expanded in PR-04)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let description = recipe.description {
+                        Text(description)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    ForEach(Array(recipe.schema.keys.sorted()), id: \.self) { key in
+                        if let field = recipe.schema[key] {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(field.label ?? key.capitalized)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                
+                                TextField(
+                                    field.placeholder ?? "",
+                                    text: Binding(
+                                        get: { formData[key] ?? "" },
+                                        set: { formData[key] = $0 }
+                                    )
+                                )
+                                .textFieldStyle(.roundedBorder)
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+            
+            Divider()
+            
+            // Submit button
+            Button {
+                onSubmit(formData)
+            } label: {
+                Text("Submit")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!isFormValid)
+            .padding()
+        }
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(radius: 10)
+        .padding()
+    }
+    
+    private var isFormValid: Bool {
+        recipe.requiredFields.allSatisfy { field in
+            let value = formData[field] ?? ""
+            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 }
 
@@ -74,4 +220,3 @@ struct BronDetailView: View {
         BronDetailView(bronId: UUID())
     }
 }
-
