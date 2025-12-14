@@ -9,7 +9,11 @@
 import SwiftUI
 
 struct SkillsListView: View {
-    @State private var skills: [Skill] = []
+    @EnvironmentObject var appState: AppState
+    
+    private var skills: [Skill] {
+        appState.skillRepository.skills
+    }
     
     var body: some View {
         Group {
@@ -34,12 +38,16 @@ struct SkillsListView: View {
             }
         }
         .navigationTitle("Skills")
+        .refreshable {
+            appState.skillRepository.fetchAll()
+        }
     }
 }
 
 #Preview {
     NavigationStack {
         SkillsListView()
+            .environmentObject(AppState(persistenceController: .preview))
     }
 }
 

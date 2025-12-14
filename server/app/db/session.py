@@ -27,6 +27,17 @@ Base = declarative_base()
 
 async def init_db():
     """Initialize database tables."""
+    # Import all models to ensure they're registered with Base.metadata
+    from app.models import (  # noqa: F401
+        BronInstance,
+        Task,
+        Skill,
+        SkillStep,
+        SkillParameter,
+        UIRecipe,
+        ChatMessage,
+    )
+    
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

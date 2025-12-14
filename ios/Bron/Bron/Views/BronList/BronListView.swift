@@ -9,7 +9,12 @@ import SwiftUI
 
 struct BronListView: View {
     @EnvironmentObject var appState: AppState
-    @State private var brons: [BronInstance] = []
+    @State private var showingCreateSheet = false
+    @State private var newBronName = ""
+    
+    private var brons: [BronInstance] {
+        appState.bronRepository.brons
+    }
     
     var body: some View {
         NavigationStack {
@@ -24,11 +29,17 @@ struct BronListView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        // Create new Bron
+                        showingCreateSheet = true
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
+            }
+            .sheet(isPresented: $showingCreateSheet) {
+                createBronSheet
+            }
+            .refreshable {
+                appState.bronRepository.fetchAll()
             }
         }
     }
@@ -40,7 +51,7 @@ struct BronListView: View {
             Text("Create your first Bron to get started.")
         } actions: {
             Button("Create Bron") {
-                // Create new Bron
+                showingCreateSheet = true
             }
             .buttonStyle(.borderedProminent)
         }
@@ -56,10 +67,39 @@ struct BronListView: View {
             BronDetailView(bronId: bronId)
         }
     }
+    
+    private var createBronSheet: some View {
+        NavigationStack {
+            Form {
+                Section("New Bron") {
+                    TextField("Name", text: $newBronName)
+                }
+            }
+            .navigationTitle("Create Bron")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        newBronName = ""
+                        showingCreateSheet = false
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        let name = newBronName.isEmpty ? "New Bron" : newBronName
+                        _ = appState.createBron(name: name)
+                        newBronName = ""
+                        showingCreateSheet = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
 }
 
 #Preview {
     BronListView()
-        .environmentObject(AppState())
+        .environmentObject(AppState(persistenceController: .preview))
 }
 

@@ -15,6 +15,7 @@ struct UIRecipe: Identifiable, Codable, Hashable {
     let requiredFields: [String]
     var title: String?
     var description: String?
+    var style: UIStyle?
     
     init(
         id: UUID = UUID(),
@@ -22,7 +23,8 @@ struct UIRecipe: Identifiable, Codable, Hashable {
         schema: [String: SchemaField] = [:],
         requiredFields: [String] = [],
         title: String? = nil,
-        description: String? = nil
+        description: String? = nil,
+        style: UIStyle? = nil
     ) {
         self.id = id
         self.componentType = componentType
@@ -30,15 +32,234 @@ struct UIRecipe: Identifiable, Codable, Hashable {
         self.requiredFields = requiredFields
         self.title = title
         self.description = description
+        self.style = style
+    }
+}
+
+// MARK: - Styling
+
+/// Pre-defined style presets for common branding
+enum UIStylePreset: String, Codable, CaseIterable {
+    // Platform defaults
+    case `default`
+    case minimal
+    
+    // Brand presets
+    case google
+    case apple
+    case microsoft
+    case github
+    case slack
+    case notion
+    case spotify
+    
+    // Category-based
+    case professional
+    case casual
+    case urgent
+    case success
+    case warning
+    case error
+    
+    // Content-specific
+    case email
+    case calendar
+    case weather
+    case financial
+    case health
+}
+
+/// Styling configuration for UI Recipes
+struct UIStyle: Codable, Hashable {
+    // Preset (optional - overrides custom values)
+    var preset: UIStylePreset?
+    
+    // Colors (hex strings)
+    var primaryColor: String?
+    var secondaryColor: String?
+    var backgroundColor: String?
+    var textColor: String?
+    var accentColor: String?
+    
+    // Typography
+    var fontFamily: String?
+    var fontWeight: FontWeight?
+    var fontSize: FontSize?
+    
+    // Layout
+    var cornerRadius: CornerRadius?
+    var padding: Padding?
+    var borderStyle: BorderStyle?
+    
+    // Effects
+    var shadow: Shadow?
+    var blurBackground: Bool?
+    
+    // Brand-specific
+    var logoUrl: String?
+    var iconName: String?  // SF Symbol name
+    
+    init(preset: UIStylePreset) {
+        self.preset = preset
+    }
+    
+    init(
+        preset: UIStylePreset? = nil,
+        primaryColor: String? = nil,
+        secondaryColor: String? = nil,
+        backgroundColor: String? = nil,
+        textColor: String? = nil,
+        accentColor: String? = nil,
+        fontFamily: String? = nil,
+        fontWeight: FontWeight? = nil,
+        fontSize: FontSize? = nil,
+        cornerRadius: CornerRadius? = nil,
+        padding: Padding? = nil,
+        borderStyle: BorderStyle? = nil,
+        shadow: Shadow? = nil,
+        blurBackground: Bool? = nil,
+        logoUrl: String? = nil,
+        iconName: String? = nil
+    ) {
+        self.preset = preset
+        self.primaryColor = primaryColor
+        self.secondaryColor = secondaryColor
+        self.backgroundColor = backgroundColor
+        self.textColor = textColor
+        self.accentColor = accentColor
+        self.fontFamily = fontFamily
+        self.fontWeight = fontWeight
+        self.fontSize = fontSize
+        self.cornerRadius = cornerRadius
+        self.padding = padding
+        self.borderStyle = borderStyle
+        self.shadow = shadow
+        self.blurBackground = blurBackground
+        self.logoUrl = logoUrl
+        self.iconName = iconName
+    }
+    
+    enum FontWeight: String, Codable {
+        case light, regular, medium, semibold, bold
+    }
+    
+    enum FontSize: String, Codable {
+        case small, medium, large
+    }
+    
+    enum CornerRadius: String, Codable {
+        case none, small, medium, large, full
+    }
+    
+    enum Padding: String, Codable {
+        case compact, normal, spacious
+    }
+    
+    enum BorderStyle: String, Codable {
+        case none, subtle, prominent
+    }
+    
+    enum Shadow: String, Codable {
+        case none, subtle, medium, prominent
     }
 }
 
 /// UI component types
-enum UIComponentType: String, Codable {
-    case form
-    case picker
-    case confirmation
-    case fileUpload
+///
+/// Categories:
+/// - Input: Collect structured data from user
+/// - Display: Show information (read-only)
+/// - Action: Trigger actions (auth, execute, approve)
+/// - Rich: Display rich content (emails, calendar, weather)
+enum UIComponentType: String, Codable, CaseIterable {
+    // === INPUT COMPONENTS ===
+    case form               // Multi-field form
+    case picker             // Single selection picker
+    case multiSelect        // Multiple selection
+    case datePicker         // Date/time selection
+    case contactPicker      // Contact selection
+    case fileUpload         // File/photo upload
+    case locationPicker     // Location selection
+    
+    // === DISPLAY COMPONENTS ===
+    case infoCard           // Generic information display
+    case weather            // Weather display
+    case summary            // Task/progress summary
+    case listView           // List of items (read-only)
+    case progress           // Progress indicator with details
+    
+    // === ACTION COMPONENTS ===
+    case confirmation       // Yes/No confirmation gate
+    case approval           // Approve action before execution
+    case authGoogle         // Google OAuth sign-in
+    case authApple          // Sign in with Apple
+    case authOAuth          // Generic OAuth flow
+    case execute            // Execute action button
+    
+    // === RICH CONTENT ===
+    case emailPreview       // Email message preview
+    case emailCompose       // Email composition
+    case calendarEvent      // Calendar event display/create
+    case messagePreview     // SMS/iMessage preview
+    case documentPreview    // Document/PDF preview
+    case linkPreview        // URL/link preview card
+    
+    /// Category of this component type
+    var category: UIComponentCategory {
+        switch self {
+        case .form, .picker, .multiSelect, .datePicker, .contactPicker, .fileUpload, .locationPicker:
+            return .input
+        case .infoCard, .weather, .summary, .listView, .progress:
+            return .display
+        case .confirmation, .approval, .authGoogle, .authApple, .authOAuth, .execute:
+            return .action
+        case .emailPreview, .emailCompose, .calendarEvent, .messagePreview, .documentPreview, .linkPreview:
+            return .rich
+        }
+    }
+    
+    /// Whether this component requires user input/action
+    var requiresUserInteraction: Bool {
+        category != .display
+    }
+    
+    /// Human-readable display name
+    var displayName: String {
+        switch self {
+        case .form: return "Form"
+        case .picker: return "Selection"
+        case .multiSelect: return "Multi-Select"
+        case .datePicker: return "Date Picker"
+        case .contactPicker: return "Contact Picker"
+        case .fileUpload: return "File Upload"
+        case .locationPicker: return "Location"
+        case .infoCard: return "Information"
+        case .weather: return "Weather"
+        case .summary: return "Summary"
+        case .listView: return "List"
+        case .progress: return "Progress"
+        case .confirmation: return "Confirm"
+        case .approval: return "Approval Required"
+        case .authGoogle: return "Sign in with Google"
+        case .authApple: return "Sign in with Apple"
+        case .authOAuth: return "Sign In"
+        case .execute: return "Execute"
+        case .emailPreview: return "Email"
+        case .emailCompose: return "Compose Email"
+        case .calendarEvent: return "Calendar Event"
+        case .messagePreview: return "Message"
+        case .documentPreview: return "Document"
+        case .linkPreview: return "Link"
+        }
+    }
+}
+
+/// Category of UI components
+enum UIComponentCategory: String, Codable {
+    case input      // Collect data
+    case display    // Show info (read-only)
+    case action     // Trigger actions
+    case rich       // Rich content
 }
 
 /// Schema field definition
@@ -50,17 +271,38 @@ struct SchemaField: Codable, Hashable {
     var validation: FieldValidation?
 }
 
-/// Field types
-enum FieldType: String, Codable {
+/// Field types for form schemas and rich content
+enum FieldType: String, Codable, CaseIterable {
+    // Basic input types
     case text
     case number
     case date
+    case datetime
+    case time
     case email
     case phone
+    case url
+    
+    // Selection types
     case select
     case multiSelect
-    case file
     case boolean
+    
+    // File types
+    case file
+    case image
+    case document
+    
+    // Rich content types
+    case location
+    case contact
+    case currency
+    
+    // Display-only types (for info cards, previews)
+    case richText
+    case html
+    case markdown
+    case json
 }
 
 /// Field validation rules

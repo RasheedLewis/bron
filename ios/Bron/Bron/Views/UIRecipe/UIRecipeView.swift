@@ -10,46 +10,324 @@ import SwiftUI
 
 struct UIRecipeView: View {
     let recipe: UIRecipe
+    var onSubmit: (([String: String]) -> Void)?
+    var onAction: ((String) -> Void)?
+    
+    private var styleResolver: UIStyleResolver {
+        UIStyleResolver(style: recipe.style)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header
-            if let title = recipe.title {
-                Text(title)
-                    .font(.headline)
-            }
+            // Header with optional brand icon
+            headerView
             
             if let description = recipe.description {
                 Text(description)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(styleResolver.secondaryColor)
             }
             
-            // Component rendering based on type
-            // To be implemented in PR-04
-            switch recipe.componentType {
-            case .form:
-                Text("Form component - Coming in PR-04")
-                    .foregroundStyle(.secondary)
-            case .picker:
-                Text("Picker component - Coming in PR-04")
-                    .foregroundStyle(.secondary)
-            case .confirmation:
-                Text("Confirmation component - Coming in PR-04")
-                    .foregroundStyle(.secondary)
-            case .fileUpload:
-                Text("File upload component - Coming in PR-04")
-                    .foregroundStyle(.secondary)
+            Divider()
+                .background(styleResolver.borderColor)
+            
+            // Component rendering based on category
+            componentView
+        }
+        .padding(styleResolver.padding)
+        .background(recipe.style != nil ? styleResolver.backgroundColor : backgroundForCategory)
+        .clipShape(RoundedRectangle(cornerRadius: styleResolver.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: styleResolver.cornerRadius)
+                .strokeBorder(
+                    recipe.style != nil ? styleResolver.borderColor : borderColorForCategory,
+                    lineWidth: styleResolver.borderWidth
+                )
+        )
+        .shadow(radius: styleResolver.shadowRadius)
+    }
+    
+    // MARK: - Header View
+    
+    @ViewBuilder
+    private var headerView: some View {
+        if let title = recipe.title {
+            HStack(spacing: 10) {
+                // Brand icon or category icon
+                if let iconName = styleResolver.iconName {
+                    Image(systemName: iconName)
+                        .font(.title2)
+                        .foregroundStyle(styleResolver.primaryColor)
+                } else {
+                    categoryIcon
+                }
+                
+                Text(title)
+                    .font(styleResolver.headlineFont)
+                    .foregroundStyle(styleResolver.textColor)
+                
+                Spacer()
+                
+                // Optional logo
+                if let logoUrl = recipe.style?.logoUrl,
+                   let url = URL(string: logoUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 24)
+                    } placeholder: {
+                        EmptyView()
+                    }
+                }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    // MARK: - Category-based styling
+    
+    private var categoryIcon: some View {
+        Group {
+            switch recipe.componentType.category {
+            case .input:
+                Image(systemName: "square.and.pencil")
+                    .foregroundStyle(.blue)
+            case .display:
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(.secondary)
+            case .action:
+                Image(systemName: "bolt.circle.fill")
+                    .foregroundStyle(.orange)
+            case .rich:
+                Image(systemName: "doc.richtext.fill")
+                    .foregroundStyle(.purple)
+            }
+        }
+    }
+    
+    private var backgroundForCategory: Color {
+        switch recipe.componentType.category {
+        case .input: return Color(.systemGray6)
+        case .display: return Color(.systemGray6).opacity(0.5)
+        case .action: return Color.orange.opacity(0.1)
+        case .rich: return Color.purple.opacity(0.05)
+        }
+    }
+    
+    private var borderColorForCategory: Color {
+        switch recipe.componentType.category {
+        case .input: return .clear
+        case .display: return .clear
+        case .action: return .orange.opacity(0.3)
+        case .rich: return .purple.opacity(0.2)
+        }
+    }
+    
+    // MARK: - Component Views
+    
+    @ViewBuilder
+    private var componentView: some View {
+        switch recipe.componentType {
+        // INPUT
+        case .form:
+            placeholderView("Form", icon: "list.bullet.rectangle", message: "Multi-field form - PR-04")
+        case .picker:
+            placeholderView("Picker", icon: "list.bullet", message: "Selection picker - PR-04")
+        case .multiSelect:
+            placeholderView("Multi-Select", icon: "checklist", message: "Multiple selection - PR-04")
+        case .datePicker:
+            placeholderView("Date", icon: "calendar", message: "Date picker - PR-04")
+        case .contactPicker:
+            placeholderView("Contact", icon: "person.crop.circle", message: "Contact picker - PR-04")
+        case .fileUpload:
+            placeholderView("Upload", icon: "arrow.up.doc", message: "File upload - PR-04")
+        case .locationPicker:
+            placeholderView("Location", icon: "location.circle", message: "Location picker - PR-04")
+            
+        // DISPLAY
+        case .infoCard:
+            placeholderView("Info", icon: "info.circle", message: "Information card - PR-04")
+        case .weather:
+            placeholderView("Weather", icon: "cloud.sun.fill", message: "Weather display - PR-04")
+        case .summary:
+            placeholderView("Summary", icon: "doc.text", message: "Summary view - PR-04")
+        case .listView:
+            placeholderView("List", icon: "list.bullet", message: "List view - PR-04")
+        case .progress:
+            placeholderView("Progress", icon: "chart.bar.fill", message: "Progress view - PR-04")
+            
+        // ACTION
+        case .confirmation:
+            confirmationView
+        case .approval:
+            approvalView
+        case .authGoogle:
+            authView(provider: "Google", icon: "globe", color: .red)
+        case .authApple:
+            authView(provider: "Apple", icon: "apple.logo", color: .primary)
+        case .authOAuth:
+            authView(provider: "Sign In", icon: "person.badge.key", color: .blue)
+        case .execute:
+            executeView
+            
+        // RICH
+        case .emailPreview:
+            placeholderView("Email", icon: "envelope.fill", message: "Email preview - PR-04")
+        case .emailCompose:
+            placeholderView("Compose", icon: "square.and.pencil", message: "Email compose - PR-04")
+        case .calendarEvent:
+            placeholderView("Event", icon: "calendar.badge.plus", message: "Calendar event - PR-04")
+        case .messagePreview:
+            placeholderView("Message", icon: "message.fill", message: "Message preview - PR-04")
+        case .documentPreview:
+            placeholderView("Document", icon: "doc.fill", message: "Document preview - PR-04")
+        case .linkPreview:
+            placeholderView("Link", icon: "link", message: "Link preview - PR-04")
+        }
+    }
+    
+    // MARK: - Reusable Component Views
+    
+    private func placeholderView(_ title: String, icon: String, message: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var confirmationView: some View {
+        HStack(spacing: 12) {
+            Button("Cancel") {
+                onAction?("cancel")
+            }
+            .buttonStyle(.bordered)
+            
+            Button("Confirm") {
+                onAction?("confirm")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    private var approvalView: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .foregroundStyle(.orange)
+                Text("This action requires your approval")
+                    .font(.subheadline)
+            }
+            
+            HStack(spacing: 12) {
+                Button("Deny") {
+                    onAction?("deny")
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+                
+                Button("Approve") {
+                    onAction?("approve")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            }
+        }
+    }
+    
+    private func authView(provider: String, icon: String, color: Color) -> some View {
+        Button {
+            onAction?("auth_\(provider.lowercased())")
+        } label: {
+            HStack {
+                if let customIcon = styleResolver.iconName {
+                    Image(systemName: customIcon)
+                } else {
+                    Image(systemName: icon)
+                }
+                Text("Sign in with \(provider)")
+            }
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(recipe.style != nil ? styleResolver.textColor : .white)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(recipe.style != nil ? styleResolver.primaryColor : color)
+    }
+    
+    private var executeView: some View {
+        Button {
+            onAction?("execute")
+        } label: {
+            HStack {
+                Image(systemName: "play.fill")
+                Text("Execute Task")
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
     }
 }
 
-#Preview {
+#Preview("Form") {
     UIRecipeView(recipe: .preview)
         .padding()
+}
+
+#Preview("Confirmation") {
+    UIRecipeView(recipe: UIRecipe(
+        componentType: .confirmation,
+        title: "Confirm Action",
+        description: "Are you sure you want to send this email?"
+    ))
+    .padding()
+}
+
+#Preview("Auth - Default") {
+    UIRecipeView(recipe: UIRecipe(
+        componentType: .authGoogle,
+        title: "Connect Google",
+        description: "Sign in to access your Gmail"
+    ))
+    .padding()
+}
+
+#Preview("Auth - Google Branded") {
+    UIRecipeView(recipe: UIRecipe(
+        componentType: .authGoogle,
+        title: "Sign in with Google",
+        description: "Connect your Google account to check emails",
+        style: UIStyle(preset: .google)
+    ))
+    .padding()
+}
+
+#Preview("Weather Display") {
+    UIRecipeView(recipe: UIRecipe(
+        componentType: .weather,
+        title: "Current Weather",
+        description: "San Francisco, CA",
+        style: UIStyle(preset: .weather)
+    ))
+    .padding()
+}
+
+#Preview("Urgent Action") {
+    UIRecipeView(recipe: UIRecipe(
+        componentType: .approval,
+        title: "Urgent: Approve Payment",
+        description: "This payment of $500 requires your approval",
+        style: UIStyle(preset: .urgent)
+    ))
+    .padding()
 }
 

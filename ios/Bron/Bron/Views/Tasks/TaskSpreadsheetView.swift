@@ -8,8 +8,12 @@
 import SwiftUI
 
 struct TaskSpreadsheetView: View {
-    @State private var tasks: [Task] = []
+    @EnvironmentObject var appState: AppState
     @State private var sortOrder = [KeyPathComparator(\Task.updatedAt, order: .reverse)]
+    
+    private var tasks: [Task] {
+        appState.taskRepository.tasks.sorted(using: sortOrder)
+    }
     
     var body: some View {
         NavigationStack {
@@ -17,10 +21,13 @@ struct TaskSpreadsheetView: View {
                 if tasks.isEmpty {
                     emptyState
                 } else {
-                    taskTable
+                    taskList
                 }
             }
             .navigationTitle("All Tasks")
+            .refreshable {
+                appState.taskRepository.fetchAll()
+            }
         }
     }
     
@@ -32,26 +39,36 @@ struct TaskSpreadsheetView: View {
         }
     }
     
-    private var taskTable: some View {
-        Table(tasks, sortOrder: $sortOrder) {
-            TableColumn("Task", value: \.title)
-            TableColumn("Category") { task in
-                Text(task.category.rawValue.capitalized)
+    // Use List for iOS (Table is iPad-only)
+    private var taskList: some View {
+        List(tasks) { task in
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(task.title)
+                        .font(.headline)
+                    Spacer()
+                    StatusPill(status: task.state.toBronStatus)
+                }
+                
+                HStack {
+                    Text(task.category.rawValue.capitalized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(task.updatedAt, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
-            TableColumn("Status") { task in
-                StatusPill(status: task.state.toBronStatus)
-            }
-            TableColumn("Updated") { task in
-                Text(task.updatedAt, style: .relative)
-            }
-        }
-        .onChange(of: sortOrder) { _, newOrder in
-            tasks.sort(using: newOrder)
+            .padding(.vertical, 4)
         }
     }
 }
 
 #Preview {
     TaskSpreadsheetView()
+        .environmentObject(AppState(persistenceController: .preview))
 }
 
