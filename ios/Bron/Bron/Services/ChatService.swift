@@ -140,6 +140,7 @@ class ChatViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var pendingRecipe: UIRecipe?
+    @Published var currentTask: BronTask?
     
     private let chatService = ChatService.shared
     private let chatRepository: ChatRepository
@@ -148,6 +149,21 @@ class ChatViewModel: ObservableObject {
     init(bronId: UUID, context: NSManagedObjectContext? = nil) {
         self.bronId = bronId
         self.chatRepository = ChatRepository(context: context ?? PersistenceController.shared.viewContext)
+    }
+    
+    /// Update task plan with new steps
+    func updateTaskPlan(_ steps: [TaskStep]) {
+        if var task = currentTask {
+            task.steps = steps
+            currentTask = task
+        } else {
+            // Create a new task with these steps
+            currentTask = BronTask(
+                title: "Current Task",
+                bronId: bronId,
+                steps: steps
+            )
+        }
     }
     
     /// Load chat history
@@ -246,7 +262,9 @@ class ChatViewModel: ObservableObject {
         error = nil
         
         do {
+            print("📤 Submitting recipe: \(recipe.id)")
             let response = try await chatService.submitUIRecipe(recipeId: recipe.id, data: data)
+            print("📥 Got response, uiRecipe: \(response.uiRecipe != nil)")
             messages.append(response)
             
             // Mark recipe as submitted locally
@@ -257,9 +275,11 @@ class ChatViewModel: ObservableObject {
             
             // Check for new UI Recipe in response
             if let newRecipe = response.uiRecipe {
+                print("🎯 New pending recipe: \(newRecipe.componentType)")
                 pendingRecipe = newRecipe
             }
         } catch {
+            print("❌ Submit error: \(error)")
             self.error = "Failed to submit information"
         }
         

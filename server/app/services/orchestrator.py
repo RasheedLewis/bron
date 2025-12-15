@@ -195,6 +195,30 @@ class TaskOrchestrator:
                 message_id=response.id,
             )
             logger.info(f"✅ Created UI Recipe: {agent_response.ui_recipe.title}")
+        else:
+            # Claude didn't provide a UI component - create a default "What next?" UI
+            # This ensures we never leave the user without an actionable interface
+            logger.warning("⚠️ Claude responded without UI component - creating default")
+            from app.services.claude import UIRecipeSpec
+            default_ui = UIRecipeSpec(
+                component_type="option_buttons",
+                title="WHAT NEXT",
+                description=None,
+                schema_fields={
+                    "continue": {"type": "text", "label": "CONTINUE"},
+                    "more_info": {"type": "text", "label": "TELL ME MORE"},
+                    "different": {"type": "text", "label": "TRY SOMETHING ELSE"},
+                },
+                required_fields=[],
+            )
+            await self._create_ui_recipe(
+                task_id=task.id,
+                spec=default_ui,
+                message_id=response.id,
+            )
+            task.state = TaskState.NEEDS_INFO
+            task.waiting_on = "What Next"
+            logger.info("✅ Created default 'What Next' UI Recipe")
         
         return task, response
 
@@ -457,6 +481,30 @@ Do NOT ask for information that has already been provided above."""
                 spec=response.ui_recipe,
                 message_id=assistant_message.id,
             )
+        else:
+            # Claude didn't provide a UI component - create a default one
+            # This ensures we never leave the user without an actionable interface
+            logger.warning("⚠️ Claude responded without UI component in _handle_agent_response")
+            from app.services.claude import UIRecipeSpec
+            default_ui = UIRecipeSpec(
+                component_type="option_buttons",
+                title="WHAT NEXT",
+                description=None,
+                schema_fields={
+                    "continue": {"type": "text", "label": "CONTINUE"},
+                    "more_info": {"type": "text", "label": "TELL ME MORE"},
+                    "different": {"type": "text", "label": "TRY SOMETHING ELSE"},
+                },
+                required_fields=[],
+            )
+            await self._create_ui_recipe(
+                task_id=task.id if task else None,
+                spec=default_ui,
+                message_id=assistant_message.id,
+            )
+            if task:
+                task.state = TaskState.NEEDS_INFO
+                task.waiting_on = "What Next"
         
         await self.db.refresh(assistant_message)
         return assistant_message

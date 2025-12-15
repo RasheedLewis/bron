@@ -75,6 +75,7 @@ enum BronStatus: String, Codable, CaseIterable {
     case waiting = "waiting"
     case needsInfo = "needs_info"
     case ready = "ready"
+    case completed = "completed"
     
     var displayName: String {
         switch self {
@@ -83,6 +84,7 @@ enum BronStatus: String, Codable, CaseIterable {
         case .waiting: return "Waiting"
         case .needsInfo: return "Needs Info"
         case .ready: return "Ready"
+        case .completed: return "Done"
         }
     }
     
@@ -93,6 +95,17 @@ enum BronStatus: String, Codable, CaseIterable {
         case .waiting: return .orange
         case .needsInfo: return .purple
         case .ready: return .green
+        case .completed: return .gray
+        }
+    }
+    
+    /// Whether this Bron is actively working
+    var isActive: Bool {
+        switch self {
+        case .working, .waiting, .needsInfo, .ready:
+            return true
+        case .idle, .completed:
+            return false
         }
     }
 }

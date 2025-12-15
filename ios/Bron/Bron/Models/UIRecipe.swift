@@ -181,45 +181,67 @@ struct UIStyle: Codable, Hashable {
 /// - Rich: Display rich content (emails, calendar, weather)
 enum UIComponentType: String, Codable, CaseIterable {
     // === INPUT COMPONENTS ===
-    case form               // Multi-field form
-    case picker             // Single selection picker
-    case multiSelect        // Multiple selection
-    case datePicker         // Date/time selection
-    case contactPicker      // Contact selection
-    case fileUpload         // File/photo upload
-    case locationPicker     // Location selection
+    case form = "form"                          // Multi-field form
+    case picker = "picker"                      // Single selection picker
+    case multiSelect = "multi_select"           // Multiple selection
+    case datePicker = "date_picker"             // Date/time selection
+    case contactPicker = "contact_picker"       // Contact selection
+    case fileUpload = "file_upload"             // File/photo upload
+    case locationPicker = "location_picker"     // Location selection
+    
+    // === CHOICE COMPONENTS (visual options) ===
+    case optionButtons = "option_buttons"       // Horizontal/vertical button choices
+    case optionCards = "option_cards"           // Card-based choices with descriptions
+    case quickReplies = "quick_replies"         // Pill-shaped quick response buttons
     
     // === DISPLAY COMPONENTS ===
-    case infoCard           // Generic information display
-    case weather            // Weather display
-    case summary            // Task/progress summary
-    case listView           // List of items (read-only)
-    case progress           // Progress indicator with details
+    case infoCard = "info_card"                 // Generic information display
+    case weather = "weather"                    // Weather display
+    case summary = "summary"                    // Task/progress summary
+    case listView = "list_view"                 // List of items (read-only)
+    case progress = "progress"                  // Progress indicator with details
+    case styledList = "styled_list"             // Visual list with icons/cards
+    case actionCards = "action_cards"           // Tappable suggestion cards
+    case statusStrip = "status_strip"           // Single-line status display
+    case infoChips = "info_chips"               // Missing info chips (tappable)
     
     // === ACTION COMPONENTS ===
-    case confirmation       // Yes/No confirmation gate
-    case approval           // Approve action before execution
-    case authGoogle         // Google OAuth sign-in
-    case authApple          // Sign in with Apple
-    case authOAuth          // Generic OAuth flow
-    case execute            // Execute action button
+    case confirmation = "confirmation"          // Yes/No confirmation gate
+    case approval = "approval"                  // Approve action before execution
+    case authGoogle = "auth_google"             // Google OAuth sign-in
+    case authApple = "auth_apple"               // Sign in with Apple
+    case authOAuth = "auth_oauth"               // Generic OAuth flow
+    case execute = "execute"                    // Execute action button
+    
+    // === CREDENTIAL/AUTH COMPONENTS ===
+    case apiKeyInput = "api_key_input"          // API key entry
+    case credentialsInput = "credentials_input" // Username/password
+    case authCallback = "auth_callback"         // OAuth callback handler
+    case serviceConnect = "service_connect"     // Connect to a service
     
     // === RICH CONTENT ===
-    case emailPreview       // Email message preview
-    case emailCompose       // Email composition
-    case calendarEvent      // Calendar event display/create
-    case messagePreview     // SMS/iMessage preview
-    case documentPreview    // Document/PDF preview
-    case linkPreview        // URL/link preview card
+    case emailPreview = "email_preview"         // Email message preview
+    case emailCompose = "email_compose"         // Email composition
+    case calendarEvent = "calendar_event"       // Calendar event display/create
+    case messagePreview = "message_preview"     // SMS/iMessage preview
+    case documentPreview = "document_preview"   // Document/PDF preview
+    case linkPreview = "link_preview"           // URL/link preview card
     
     /// Category of this component type
     var category: UIComponentCategory {
         switch self {
         case .form, .picker, .multiSelect, .datePicker, .contactPicker, .fileUpload, .locationPicker:
             return .input
-        case .infoCard, .weather, .summary, .listView, .progress:
+        case .optionButtons, .optionCards, .quickReplies:
+            return .input  // User makes a choice
+        case .infoCard, .weather, .summary, .listView, .progress, .styledList, .statusStrip:
             return .display
-        case .confirmation, .approval, .authGoogle, .authApple, .authOAuth, .execute:
+        case .infoChips:
+            return .input  // Tappable chips to provide missing info
+        case .actionCards:
+            return .action  // Tappable suggestions
+        case .confirmation, .approval, .authGoogle, .authApple, .authOAuth, .execute,
+             .apiKeyInput, .credentialsInput, .authCallback, .serviceConnect:
             return .action
         case .emailPreview, .emailCompose, .calendarEvent, .messagePreview, .documentPreview, .linkPreview:
             return .rich
@@ -241,10 +263,17 @@ enum UIComponentType: String, Codable, CaseIterable {
         case .contactPicker: return "Contact Picker"
         case .fileUpload: return "File Upload"
         case .locationPicker: return "Location"
+        case .optionButtons: return "Choose"
+        case .optionCards: return "Options"
+        case .quickReplies: return "Reply"
         case .infoCard: return "Information"
         case .weather: return "Weather"
         case .summary: return "Summary"
         case .listView: return "List"
+        case .styledList: return "List"
+        case .actionCards: return "Suggestions"
+        case .statusStrip: return "Status"
+        case .infoChips: return "Missing"
         case .progress: return "Progress"
         case .confirmation: return "Confirm"
         case .approval: return "Approval Required"
@@ -252,6 +281,10 @@ enum UIComponentType: String, Codable, CaseIterable {
         case .authApple: return "Sign in with Apple"
         case .authOAuth: return "Sign In"
         case .execute: return "Execute"
+        case .apiKeyInput: return "Enter API Key"
+        case .credentialsInput: return "Sign In"
+        case .authCallback: return "Completing Sign In"
+        case .serviceConnect: return "Connect Service"
         case .emailPreview: return "Email"
         case .emailCompose: return "Compose Email"
         case .calendarEvent: return "Calendar Event"
@@ -277,6 +310,51 @@ struct SchemaField: Codable, Hashable {
     var placeholder: String?
     var options: [String]?
     var validation: FieldValidation?
+    var value: String?  // For hidden/prefilled fields
+    var required: Bool?
+    
+    // Memberwise init for programmatic creation
+    init(
+        type: FieldType,
+        label: String? = nil,
+        placeholder: String? = nil,
+        options: [String]? = nil,
+        validation: FieldValidation? = nil,
+        value: String? = nil,
+        required: Bool? = nil
+    ) {
+        self.type = type
+        self.label = label
+        self.placeholder = placeholder
+        self.options = options
+        self.validation = validation
+        self.value = value
+        self.required = required
+    }
+    
+    // Allow unknown keys to be ignored during decoding
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode type, default to .text if unknown
+        if let typeString = try? container.decode(String.self, forKey: .type),
+           let fieldType = FieldType(rawValue: typeString) {
+            type = fieldType
+        } else {
+            type = .text
+        }
+        
+        label = try? container.decodeIfPresent(String.self, forKey: .label)
+        placeholder = try? container.decodeIfPresent(String.self, forKey: .placeholder)
+        options = try? container.decodeIfPresent([String].self, forKey: .options)
+        validation = try? container.decodeIfPresent(FieldValidation.self, forKey: .validation)
+        value = try? container.decodeIfPresent(String.self, forKey: .value)
+        required = try? container.decodeIfPresent(Bool.self, forKey: .required)
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case type, label, placeholder, options, validation, value, required
+    }
 }
 
 /// Field types for form schemas and rich content
@@ -293,7 +371,7 @@ enum FieldType: String, Codable, CaseIterable {
     
     // Selection types
     case select
-    case multiSelect
+    case multiSelect = "multi_select"
     case boolean
     
     // File types
@@ -307,10 +385,13 @@ enum FieldType: String, Codable, CaseIterable {
     case currency
     
     // Display-only types (for info cards, previews)
-    case richText
+    case richText = "rich_text"
     case html
     case markdown
     case json
+    
+    // Hidden/utility types
+    case hidden
 }
 
 /// Field validation rules

@@ -38,12 +38,21 @@ class UIComponentType(str, Enum):
     FILE_UPLOAD = "file_upload"         # File/photo upload
     LOCATION_PICKER = "location_picker" # Location selection
     
+    # === CHOICE COMPONENTS (visual options) ===
+    OPTION_BUTTONS = "option_buttons"   # Vertical button choices
+    OPTION_CARDS = "option_cards"       # Card-based choices with descriptions
+    QUICK_REPLIES = "quick_replies"     # Pill-shaped quick response buttons
+    
     # === DISPLAY COMPONENTS ===
     INFO_CARD = "info_card"             # Generic information display
     WEATHER = "weather"                 # Weather display
     SUMMARY = "summary"                 # Task/progress summary
     LIST_VIEW = "list_view"             # List of items (read-only)
     PROGRESS = "progress"               # Progress indicator with details
+    STYLED_LIST = "styled_list"         # Visual list with icons/cards
+    ACTION_CARDS = "action_cards"       # Tappable suggestion cards
+    STATUS_STRIP = "status_strip"       # Single-line status display
+    INFO_CHIPS = "info_chips"           # Missing info chips (tappable)
     
     # === ACTION COMPONENTS ===
     CONFIRMATION = "confirmation"       # Yes/No confirmation gate
@@ -52,6 +61,12 @@ class UIComponentType(str, Enum):
     AUTH_APPLE = "auth_apple"           # Sign in with Apple
     AUTH_OAUTH = "auth_oauth"           # Generic OAuth flow
     EXECUTE = "execute"                 # Execute action button
+    
+    # === CREDENTIAL/AUTH COMPONENTS ===
+    API_KEY_INPUT = "api_key_input"     # API key entry (e.g., OpenAI, Stripe)
+    CREDENTIALS_INPUT = "credentials_input"  # Username/password (secure)
+    AUTH_CALLBACK = "auth_callback"     # OAuth callback handler
+    SERVICE_CONNECT = "service_connect" # Connect to a service (shows permissions)
     
     # === RICH CONTENT ===
     EMAIL_PREVIEW = "email_preview"     # Email message preview

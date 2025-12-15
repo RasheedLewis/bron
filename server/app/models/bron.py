@@ -15,6 +15,7 @@ from app.models.base import TimestampMixin, UUIDMixin
 if TYPE_CHECKING:
     from app.models.task import Task
     from app.models.chat import ChatMessage
+    from app.models.credential import Credential
 
 
 class BronStatus(str, Enum):
@@ -25,6 +26,7 @@ class BronStatus(str, Enum):
     WAITING = "waiting"
     NEEDS_INFO = "needs_info"
     READY = "ready"
+    COMPLETED = "completed"
 
 
 class BronInstance(Base, UUIDMixin, TimestampMixin):
@@ -65,6 +67,12 @@ class BronInstance(Base, UUIDMixin, TimestampMixin):
     
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
+        back_populates="bron",
+        cascade="all, delete-orphan",
+    )
+    
+    credentials: Mapped[list["Credential"]] = relationship(
+        "Credential",
         back_populates="bron",
         cascade="all, delete-orphan",
     )

@@ -21,6 +21,9 @@ struct BronTask: Identifiable, Codable, Hashable {
     let createdAt: Date
     var updatedAt: Date
     
+    /// The execution plan - list of steps to complete
+    var steps: [TaskStep]
+    
     init(
         id: UUID = UUID(),
         title: String,
@@ -31,6 +34,7 @@ struct BronTask: Identifiable, Codable, Hashable {
         progress: Double = 0,
         nextAction: String? = nil,
         waitingOn: String? = nil,
+        steps: [TaskStep] = [],
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -43,8 +47,33 @@ struct BronTask: Identifiable, Codable, Hashable {
         self.progress = progress
         self.nextAction = nextAction
         self.waitingOn = waitingOn
+        self.steps = steps
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+    
+    // MARK: - Computed Properties
+    
+    /// Current step being worked on (first in-progress, or first pending)
+    var currentStep: TaskStep? {
+        steps.first { $0.status == .inProgress } ?? steps.first { $0.status == .pending }
+    }
+    
+    /// Index of the current step (1-based for display)
+    var currentStepIndex: Int? {
+        guard let current = currentStep else { return nil }
+        return steps.firstIndex(where: { $0.id == current.id }).map { $0 + 1 }
+    }
+    
+    /// Number of completed steps
+    var completedStepCount: Int {
+        steps.filter { $0.status == .completed }.count
+    }
+    
+    /// Progress based on steps (0.0 to 1.0)
+    var stepProgress: Double {
+        guard !steps.isEmpty else { return progress }
+        return Double(completedStepCount) / Double(steps.count)
     }
 }
 
@@ -104,7 +133,8 @@ extension BronTask {
             category: .admin,
             bronId: UUID(),
             progress: 0.3,
-            nextAction: "Upload receipt photo"
+            nextAction: "Upload receipt photo",
+            steps: TaskStep.previewPlan
         )
     }
 }

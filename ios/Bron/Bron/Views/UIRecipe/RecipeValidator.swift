@@ -55,10 +55,14 @@ struct RecipeValidator {
     static let allowedComponentTypes: Set<UIComponentType> = [
         // Input
         .form, .picker, .multiSelect, .datePicker, .contactPicker, .fileUpload, .locationPicker,
+        // Choice (visual options)
+        .optionButtons, .optionCards, .quickReplies, .infoChips,
         // Display
-        .infoCard, .weather, .summary, .listView, .progress,
+        .infoCard, .weather, .summary, .listView, .progress, .styledList, .actionCards, .statusStrip,
         // Action
         .confirmation, .approval, .authGoogle, .authApple, .authOAuth, .execute,
+        // Credential/Auth
+        .apiKeyInput, .credentialsInput, .authCallback, .serviceConnect,
         // Rich
         .emailPreview, .emailCompose, .calendarEvent, .messagePreview, .documentPreview, .linkPreview
     ]
@@ -69,7 +73,8 @@ struct RecipeValidator {
         .select, .multiSelect, .boolean,
         .file, .image, .document,
         .location, .contact, .currency,
-        .richText, .html, .markdown, .json
+        .richText, .html, .markdown, .json,
+        .hidden
     ]
     
     // MARK: - Validation
@@ -85,8 +90,9 @@ struct RecipeValidator {
         
         // For input components, validate schema
         if recipe.componentType.category == .input {
-            // Check schema isn't empty (unless it's a simple picker)
-            if recipe.schema.isEmpty && recipe.componentType != .datePicker {
+            // Check schema isn't empty (unless it's a simple picker or choice component)
+            let choiceComponents: Set<UIComponentType> = [.optionButtons, .optionCards, .quickReplies, .infoChips, .datePicker]
+            if recipe.schema.isEmpty && !choiceComponents.contains(recipe.componentType) {
                 errors.append(.schemaEmpty)
             }
             

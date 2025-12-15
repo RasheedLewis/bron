@@ -11,6 +11,7 @@ import SwiftUI
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var bronId: String = ""  // Required for OAuth flows
     var onRecipeAction: ((RecipeAction, [String: String]?) -> Void)?
     
     private var isUser: Bool {
@@ -31,18 +32,14 @@ struct MessageBubble: View {
         HStack {
             Spacer(minLength: 60)
             
-            Text(message.content)
-                .font(BronTypography.bodyM)
-                .foregroundStyle(BronColors.textPrimary)
+                Text(message.content)
+                .font(BronTypography.plex(size: 18, weight: .medium))
+                .foregroundStyle(BronColors.white)
                 .padding(.horizontal, BronLayout.spacingL)
                 .padding(.vertical, BronLayout.spacingM)
                 .background(
                     RoundedRectangle(cornerRadius: BronLayout.cornerRadiusM)
-                        .fill(BronColors.gray050)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: BronLayout.cornerRadiusM)
-                        .strokeBorder(BronColors.gray150, lineWidth: 1)
+                        .fill(BronColors.black)
                 )
         }
         .padding(.horizontal, BronLayout.spacingL)
@@ -77,6 +74,7 @@ struct MessageBubble: View {
             if let recipe = message.uiRecipe {
                 UIRecipeView(
                     recipe: recipe,
+                    bronId: bronId,
                     onAction: onRecipeAction
                 )
                 .padding(.top, BronLayout.spacingS)
@@ -224,7 +222,7 @@ struct MessageBubble: View {
     .padding(.vertical)
     .background(BronColors.surface)
 }
-
+        
 #Preview("Bron Message - Next Step") {
     VStack(spacing: BronLayout.spacingL) {
         MessageBubble(message: ChatMessage(

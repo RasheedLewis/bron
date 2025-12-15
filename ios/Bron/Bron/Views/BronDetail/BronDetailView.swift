@@ -46,6 +46,9 @@ struct BronDetailView: View {
                 // Error banner
                 errorBanner
                 
+                // Task Plan (pinned above composer)
+                taskPlanSection
+                
                 // Composer
                 MessageComposer(
                     text: $inputText,
@@ -123,6 +126,7 @@ struct BronDetailView: View {
                     ForEach(viewModel.messages) { message in
                         MessageBubble(
                             message: message,
+                            bronId: bron.id.uuidString,
                             onRecipeAction: handleRecipeAction
                         )
                         .id(message.id)
@@ -204,25 +208,30 @@ struct BronDetailView: View {
     // MARK: - Typing Indicator
     
     private var typingIndicator: some View {
-        VStack(alignment: .leading, spacing: BronLayout.spacingS) {
-            // Divider
-            Rectangle()
-                .fill(BronColors.gray150)
-                .frame(height: 1)
-            
-            HStack(spacing: BronLayout.spacingS) {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .fill(BronColors.gray500)
-                        .frame(width: 6, height: 6)
+        HStack {
+            VStack(alignment: .leading, spacing: BronLayout.spacingS) {
+                // Divider
+                Rectangle()
+                    .fill(BronColors.gray150)
+                    .frame(height: 1)
+                
+                HStack(spacing: BronLayout.spacingS) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle()
+                            .fill(BronColors.gray500)
+                            .frame(width: 6, height: 6)
+                            .opacity(0.4 + Double(i) * 0.3)  // Subtle fade effect
+                    }
                 }
+                .padding(.horizontal, BronLayout.spacingM)
+                .padding(.vertical, BronLayout.spacingS)
+                .background(BronColors.gray050)
+                .clipShape(RoundedRectangle(cornerRadius: BronLayout.cornerRadiusS))
             }
-            .padding(.horizontal, BronLayout.spacingM)
-            .padding(.vertical, BronLayout.spacingS)
-            .background(BronColors.gray050)
             
             Spacer()
         }
+        .padding(.horizontal, BronLayout.spacingM)
     }
     
     // MARK: - Error Banner
@@ -250,6 +259,29 @@ struct BronDetailView: View {
             .overlay(
                 Rectangle()
                     .strokeBorder(BronColors.gray300, lineWidth: 1)
+            )
+        }
+    }
+    
+    // MARK: - Task Plan Section
+    
+    @ViewBuilder
+    private var taskPlanSection: some View {
+        if viewModel.pendingRecipe != nil || (viewModel.currentTask?.steps.isEmpty == false) {
+            TaskPlanView(
+                steps: viewModel.currentTask?.steps ?? [],
+                taskTitle: viewModel.currentTask?.title,
+                pendingRecipe: viewModel.pendingRecipe,
+                waitingOn: viewModel.currentTask?.waitingOn
+            )
+            .padding(.horizontal, BronLayout.spacingM)
+            .padding(.bottom, BronLayout.spacingS)
+            .background(BronColors.surface)
+            .overlay(
+                Rectangle()
+                    .frame(height: 1)
+                    .foregroundStyle(BronColors.gray150),
+                alignment: .top
             )
         }
     }
@@ -285,8 +317,10 @@ struct BronDetailView: View {
                 // Send confirmation to backend
                 await viewModel.submitRecipe(["action": action.rawValue])
             case .auth:
-                // Handle authentication flow
-                print("Auth requested")
+                // Submit auth request to backend with provider info
+                var authData = data ?? [:]
+                authData["action"] = "auth"
+                await viewModel.submitRecipe(authData)
             case .skip:
                 // Defer/skip the recipe
                 print("Recipe skipped")

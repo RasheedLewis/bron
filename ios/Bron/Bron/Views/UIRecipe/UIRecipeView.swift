@@ -22,6 +22,7 @@ enum RecipeAction: String {
 
 struct UIRecipeView: View {
     let recipe: UIRecipe
+    var bronId: String = ""  // Required for OAuth flows
     var onAction: ((RecipeAction, [String: String]?) -> Void)?
     
     @State private var formData: [String: String] = [:]
@@ -161,6 +162,14 @@ struct UIRecipeView: View {
                 fileUploadField
             case .locationPicker:
                 locationPickerField
+            case .optionButtons:
+                optionButtonsView
+            case .optionCards:
+                optionCardsView
+            case .quickReplies:
+                quickRepliesView
+            case .infoChips:
+                infoChipsView
             default:
                 formFields
             }
@@ -532,6 +541,197 @@ struct UIRecipeView: View {
         }
     }
     
+    // MARK: - Option/Choice Components
+    
+    /// ACTION LIST - Full-width vertical buttons (broadcast control panel style)
+    private var optionButtonsView: some View {
+        let options = extractOptions()
+        
+        return VStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                Button {
+                    formData["selected"] = option.id
+                    onAction?(.submit, ["selected": option.id])
+                } label: {
+                    HStack(spacing: 0) {
+                        Text("[ \(option.title.uppercased()) ]")
+                            .font(BronTypography.bodyM)
+                            .fontWeight(.medium)
+                            .foregroundStyle(BronColors.textPrimary)
+                            .tracking(0.5)
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, BronLayout.spacingM)
+                    .padding(.vertical, BronLayout.spacingM)
+                    .background(BronColors.surface)
+                }
+                .buttonStyle(ActionButtonStyle())
+                
+                // Divider between options
+                if index < options.count - 1 {
+                    Rectangle()
+                        .fill(BronColors.gray300)
+                        .frame(height: 1)
+                }
+            }
+        }
+        .overlay(
+            Rectangle()
+                .strokeBorder(BronColors.black, lineWidth: 1)
+        )
+    }
+    
+    /// OPTION CARDS - Choices with brief descriptions (broadcast panel style)
+    private var optionCardsView: some View {
+        let options = extractOptions()
+        
+        return VStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                Button {
+                    formData["selected"] = option.id
+                    onAction?(.submit, ["selected": option.id])
+                } label: {
+                    HStack(spacing: 0) {
+                        // Left accent bar
+                        Rectangle()
+                            .fill(BronColors.black)
+                            .frame(width: 4)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(option.title.uppercased())
+                                .font(BronTypography.bodyM)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(BronColors.textPrimary)
+                                .tracking(0.5)
+                            
+                            if let desc = option.description {
+                                Text(desc)
+                                    .font(BronTypography.bodyM)
+                                    .foregroundStyle(BronColors.textMeta)
+                            }
+                        }
+                        .padding(.horizontal, BronLayout.spacingM)
+                        .padding(.vertical, BronLayout.spacingS)
+                        
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .background(BronColors.surface)
+                }
+                .buttonStyle(ActionButtonStyle())
+                
+                // Divider
+                if index < options.count - 1 {
+                    Rectangle()
+                        .fill(BronColors.gray300)
+                        .frame(height: 1)
+                }
+            }
+        }
+        .overlay(
+            Rectangle()
+                .strokeBorder(BronColors.gray300, lineWidth: 1)
+        )
+    }
+    
+    /// QUICK REPLIES - Horizontal tappable options (rectangular, not pills)
+    private var quickRepliesView: some View {
+        let options = extractOptions()
+        
+        return HStack(spacing: BronLayout.spacingS) {
+            ForEach(options, id: \.id) { option in
+                Button {
+                    formData["selected"] = option.id
+                    onAction?(.submit, ["selected": option.id])
+                } label: {
+                    Text(option.title.uppercased())
+                        .font(BronTypography.meta)
+                        .fontWeight(.medium)
+                        .foregroundStyle(BronColors.textPrimary)
+                        .tracking(0.5)
+                        .padding(.horizontal, BronLayout.spacingM)
+                        .padding(.vertical, BronLayout.spacingS)
+                        .background(BronColors.surface)
+                        .overlay(
+                            Rectangle()
+                                .strokeBorder(BronColors.gray300, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(ActionButtonStyle())
+            }
+            
+            Spacer()
+        }
+    }
+    
+    /// INFO CHIPS - Missing info as tappable chips
+    private var infoChipsView: some View {
+        let options = extractOptions()
+        
+        return VStack(alignment: .leading, spacing: BronLayout.spacingS) {
+            Text("MISSING")
+                .font(BronTypography.meta)
+                .fontWeight(.bold)
+                .foregroundStyle(BronColors.textMeta)
+                .tracking(1)
+            
+            HStack(spacing: BronLayout.spacingS) {
+                ForEach(options, id: \.id) { option in
+                    Button {
+                        formData["selected"] = option.id
+                        onAction?(.submit, ["selected": option.id])
+                    } label: {
+                        Text("[ \(option.title.uppercased()) ]")
+                            .font(BronTypography.meta)
+                            .foregroundStyle(BronColors.textPrimary)
+                            .padding(.horizontal, BronLayout.spacingS)
+                            .padding(.vertical, BronLayout.spacingXS)
+                            .background(BronColors.surface)
+                            .overlay(
+                                Rectangle()
+                                    .strokeBorder(BronColors.gray500, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(ActionButtonStyle())
+                }
+            }
+        }
+    }
+    
+    // MARK: - Option Helpers
+    
+    private struct OptionItem {
+        let id: String
+        let title: String
+        let description: String?
+        let icon: String?
+    }
+    
+    private func extractOptions() -> [OptionItem] {
+        // Extract options from schema fields
+        var options: [OptionItem] = []
+        
+        for (key, field) in recipe.schema.sorted(by: { $0.key < $1.key }) {
+            if let fieldOptions = field.options {
+                // If field has options array, use those
+                for opt in fieldOptions {
+                    options.append(OptionItem(id: opt, title: opt, description: nil, icon: nil))
+                }
+            } else {
+                // Otherwise, treat each schema field as an option
+                options.append(OptionItem(
+                    id: key,
+                    title: field.label ?? key,
+                    description: field.placeholder,
+                    icon: nil
+                ))
+            }
+        }
+        
+        return options
+    }
+    
     // MARK: - Display Components
     
     @ViewBuilder
@@ -545,10 +745,114 @@ struct UIRecipeView: View {
             progressView
         case .listView:
             listView
+        case .styledList:
+            styledListView
+        case .actionCards:
+            actionCardsView
+        case .statusStrip:
+            statusStripView
         default:
             Text("Display content")
                 .utilityStyle(.medium)
                 .foregroundStyle(BronColors.textMeta)
+        }
+    }
+    
+    /// STYLED LIST - Display items with left accent (broadcast style)
+    private var styledListView: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(recipe.schema.keys.sorted().enumerated()), id: \.offset) { index, key in
+                if let field = recipe.schema[key] {
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(BronColors.gray500)
+                            .frame(width: 3)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text((field.label ?? key).uppercased())
+                                .font(BronTypography.meta)
+                                .fontWeight(.medium)
+                                .foregroundStyle(BronColors.textPrimary)
+                            
+                            if let placeholder = field.placeholder {
+                                Text(placeholder)
+                                    .font(BronTypography.bodyM)
+                                    .foregroundStyle(BronColors.textMeta)
+                            }
+                        }
+                        .padding(.horizontal, BronLayout.spacingM)
+                        .padding(.vertical, BronLayout.spacingS)
+                        
+                        Spacer()
+                    }
+                    
+                    Rectangle().fill(BronColors.gray300).frame(height: 1)
+                }
+            }
+        }
+        .overlay(Rectangle().strokeBorder(BronColors.gray300, lineWidth: 1))
+    }
+    
+    /// ACTION CARDS - Tappable suggestions (deep red = commit)
+    private var actionCardsView: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(recipe.schema.keys.sorted().enumerated()), id: \.offset) { index, key in
+                if let field = recipe.schema[key] {
+                    Button {
+                        onAction?(.submit, ["action": key])
+                    } label: {
+                        HStack(spacing: 0) {
+                            Rectangle()
+                                .fill(BronColors.deepRed)
+                                .frame(width: 4)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text((field.label ?? key).uppercased())
+                                    .font(BronTypography.bodyM)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(BronColors.textPrimary)
+                                
+                                if let desc = field.placeholder {
+                                    Text(desc)
+                                        .font(BronTypography.bodyM)
+                                        .foregroundStyle(BronColors.textMeta)
+                                }
+                            }
+                            .padding(.horizontal, BronLayout.spacingM)
+                            .padding(.vertical, BronLayout.spacingS)
+                            
+                            Spacer()
+                        }
+                        .background(BronColors.surface)
+                    }
+                    .buttonStyle(ActionButtonStyle())
+                    
+                    if index < recipe.schema.count - 1 {
+                        Rectangle().fill(BronColors.gray300).frame(height: 1)
+                    }
+                }
+            }
+        }
+        .overlay(Rectangle().strokeBorder(BronColors.gray300, lineWidth: 1))
+    }
+    
+    private func iconForFieldType(_ type: FieldType) -> String {
+        switch type {
+        case .text: return "doc.text"
+        case .number: return "number"
+        case .date, .datetime: return "calendar"
+        case .time: return "clock"
+        case .email: return "envelope"
+        case .phone: return "phone"
+        case .url: return "link"
+        case .select, .multiSelect: return "list.bullet"
+        case .boolean: return "checkmark.circle"
+        case .file, .document: return "doc"
+        case .image: return "photo"
+        case .location: return "location"
+        case .contact: return "person"
+        case .currency: return "dollarsign.circle"
+        default: return "circle"
         }
     }
     
@@ -650,6 +954,35 @@ struct UIRecipeView: View {
         }
     }
     
+    /// STATUS STRIP - Single-line status (broadcast style)
+    private var statusStripView: some View {
+        HStack(spacing: BronLayout.spacingS) {
+            // Extract status info from schema
+            let status = recipe.schema["status"]?.placeholder ?? "WORKING"
+            let step = recipe.schema["step"]?.placeholder
+            
+            Text(status.uppercased())
+                .font(BronTypography.displayM)
+                .fontWeight(.bold)
+                .foregroundStyle(BronColors.textPrimary)
+                .tracking(1)
+            
+            if let step = step {
+                Text("•")
+                    .foregroundStyle(BronColors.textMeta)
+                Text(step.uppercased())
+                    .font(BronTypography.bodyM)
+                    .foregroundStyle(BronColors.textMeta)
+                    .tracking(0.5)
+            }
+            
+            Spacer()
+        }
+        .padding(BronLayout.spacingM)
+        .background(BronColors.black)
+        .foregroundStyle(BronColors.white)
+    }
+    
     // MARK: - Action Components
     
     @ViewBuilder
@@ -660,13 +993,21 @@ struct UIRecipeView: View {
         case .approval:
             approvalView
         case .authGoogle:
-            authView(provider: "Google", icon: "g.circle.fill", color: .red)
+            brandedAuthView(brand: .google, providerName: "Google")
         case .authApple:
-            authView(provider: "Apple", icon: "apple.logo", color: .black)
+            brandedAuthView(brand: .apple, providerName: "Apple")
         case .authOAuth:
-            authView(provider: "Provider", icon: "key.fill", color: .gray)
+            brandedAuthView(brand: BrandStyle.forProvider(recipe.title), providerName: recipe.title ?? "Provider")
         case .execute:
             executeView
+        case .apiKeyInput:
+            apiKeyInputView
+        case .credentialsInput:
+            credentialsInputView
+        case .serviceConnect:
+            serviceConnectView
+        case .authCallback:
+            authCallbackView
         default:
             EmptyView()
         }
@@ -700,20 +1041,24 @@ struct UIRecipeView: View {
         }
     }
     
-    private func authView(provider: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .center, spacing: BronLayout.spacingM) {
-            Image(systemName: icon)
-                .font(.system(size: 40))
-                .foregroundStyle(color)
-            
-            Text("Sign in with \(provider) to continue")
-                .utilityStyle(.medium)
-                .foregroundStyle(BronColors.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(BronLayout.spacingL)
+    /// Branded auth button matching the service's visual identity
+    private func brandedAuthView(brand: BrandStyle, providerName: String) -> some View {
+        BrandedAuthButton(
+            brand: brand,
+            providerName: providerName,
+            description: recipe.description,
+            bronId: bronId,
+            onSuccess: { result in
+                // Notify that auth succeeded
+                onAction?(.auth, ["provider": providerName.lowercased(), "success": "true", "message": result.message])
+            },
+            onError: { error in
+                // Auth failed - could show error UI
+                print("Auth failed: \(error.localizedDescription)")
+            }
+        )
     }
+    
     
     private var executeView: some View {
         VStack(alignment: .leading, spacing: BronLayout.spacingS) {
@@ -725,6 +1070,199 @@ struct UIRecipeView: View {
                     .foregroundStyle(BronColors.textPrimary)
             }
         }
+    }
+    
+    // MARK: - Credential Input Views
+    
+    private var apiKeyInputView: some View {
+        let brand = BrandStyle.forProvider(recipe.title)
+        
+        return VStack(alignment: .leading, spacing: BronLayout.spacingM) {
+            // Branded provider header
+            HStack(spacing: BronLayout.spacingM) {
+                // Brand icon with accent color
+                Image(systemName: brand.iconName)
+                    .font(.system(size: 28, weight: brand.fontWeight))
+                    .foregroundStyle(brand.primaryColor)
+                    .frame(width: 44, height: 44)
+                    .background(brand.primaryColor.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: brand.cornerRadius))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("API KEY REQUIRED")
+                        .font(BronTypography.meta)
+                        .tracking(1)
+                        .foregroundStyle(BronColors.textMeta)
+                    
+                    if let title = recipe.title {
+                        Text(title.uppercased())
+                            .font(BronTypography.displayS)
+                            .foregroundStyle(BronColors.textPrimary)
+                    }
+                }
+            }
+            
+            // Description
+            if let description = recipe.description {
+                Text(description)
+                    .font(BronTypography.bodyS)
+                    .foregroundStyle(BronColors.textSecondary)
+            }
+            
+            // API Key input field with brand accent
+            SecureField("Enter API Key", text: binding(for: "api_key"))
+                .font(BronTypography.bodyM)
+                .padding(BronLayout.spacingM)
+                .background(BronColors.surface)
+                .overlay(
+                    Rectangle()
+                        .strokeBorder(brand.primaryColor.opacity(0.3), lineWidth: 1)
+                )
+            
+            // Security note
+            HStack(spacing: BronLayout.spacingXS) {
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                Text("Stored securely on-device")
+                    .font(BronTypography.meta)
+            }
+            .foregroundStyle(BronColors.textMeta)
+        }
+    }
+    
+    private var credentialsInputView: some View {
+        let providerName = recipe.title ?? "Service"
+        let brand = BrandStyle.forProvider(providerName)
+        
+        return VStack(alignment: .leading, spacing: BronLayout.spacingM) {
+            // Branded provider header
+            HStack(spacing: BronLayout.spacingM) {
+                Image(systemName: brand.iconName)
+                    .font(.system(size: 24, weight: brand.fontWeight))
+                    .foregroundStyle(brand.primaryColor)
+                    .frame(width: 44, height: 44)
+                    .background(brand.primaryColor.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: brand.cornerRadius))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("SIGN IN TO")
+                        .font(BronTypography.meta)
+                        .tracking(1)
+                        .foregroundStyle(BronColors.textMeta)
+                    
+                    Text(providerName.uppercased())
+                        .font(BronTypography.displayS)
+                        .foregroundStyle(BronColors.textPrimary)
+                }
+            }
+            
+            // Username field with brand accent
+            TextField("Email or username", text: binding(for: "username"))
+                .font(BronTypography.bodyM)
+                .textContentType(.username)
+                .autocapitalization(.none)
+                .padding(BronLayout.spacingM)
+                .background(BronColors.surface)
+                .overlay(
+                    Rectangle()
+                        .strokeBorder(brand.primaryColor.opacity(0.3), lineWidth: 1)
+                )
+            
+            // Password field
+            SecureField("Password", text: binding(for: "password"))
+                .font(BronTypography.bodyM)
+                .textContentType(.password)
+                .padding(BronLayout.spacingM)
+                .background(BronColors.surface)
+                .overlay(
+                    Rectangle()
+                        .strokeBorder(brand.primaryColor.opacity(0.3), lineWidth: 1)
+                )
+            
+            // Security note
+            HStack(spacing: BronLayout.spacingXS) {
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                Text("Stored securely on-device")
+                    .font(BronTypography.meta)
+            }
+            .foregroundStyle(BronColors.textMeta)
+        }
+    }
+    
+    private var serviceConnectView: some View {
+        let serviceName = recipe.title ?? "Service"
+        let permissions = recipe.schema.values.compactMap { $0.label }
+        let brand = BrandStyle.forProvider(serviceName)
+        
+        return VStack(alignment: .leading, spacing: BronLayout.spacingM) {
+            // Branded service header
+            HStack(spacing: BronLayout.spacingM) {
+                Image(systemName: brand.iconName)
+                    .font(.system(size: 32, weight: brand.fontWeight))
+                    .foregroundStyle(brand.textColor)
+                    .frame(width: 56, height: 56)
+                    .background(brand.primaryColor)
+                    .clipShape(RoundedRectangle(cornerRadius: brand.cornerRadius))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CONNECT")
+                        .font(BronTypography.meta)
+                        .tracking(1)
+                        .foregroundStyle(BronColors.textMeta)
+                    
+                    Text(serviceName.uppercased())
+                        .font(BronTypography.displayM)
+                        .foregroundStyle(BronColors.textPrimary)
+                }
+            }
+            
+            // Description
+            if let description = recipe.description {
+                Text(description)
+                    .font(BronTypography.bodyS)
+                    .foregroundStyle(BronColors.textSecondary)
+            }
+            
+            // Permissions list with brand accent
+            if !permissions.isEmpty {
+                VStack(alignment: .leading, spacing: BronLayout.spacingXS) {
+                    Text("PERMISSIONS")
+                        .font(BronTypography.meta)
+                        .tracking(1)
+                        .foregroundStyle(BronColors.textMeta)
+                    
+                    ForEach(permissions, id: \.self) { permission in
+                        HStack(spacing: BronLayout.spacingS) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(brand.primaryColor)
+                            Text(permission)
+                                .font(BronTypography.bodyS)
+                                .foregroundStyle(BronColors.textSecondary)
+                        }
+                    }
+                }
+                .padding(BronLayout.spacingM)
+                .background(brand.primaryColor.opacity(0.05))
+                .overlay(
+                    Rectangle()
+                        .strokeBorder(brand.primaryColor.opacity(0.2), lineWidth: 1)
+                )
+            }
+        }
+    }
+    
+    private var authCallbackView: some View {
+        VStack(spacing: BronLayout.spacingL) {
+            ProgressView()
+                .scaleEffect(1.5)
+            
+            Text("Completing sign in...")
+                .utilityStyle(.medium)
+                .foregroundStyle(BronColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(BronLayout.spacingXL)
     }
     
     // MARK: - Rich Components
@@ -905,7 +1443,7 @@ struct UIRecipeView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, BronLayout.spacingS)
-        } else if recipe.componentType.requiresUserInteraction {
+        } else if recipe.componentType.requiresUserInteraction && !hasBuiltInButton {
             HStack(spacing: BronLayout.spacingM) {
                 // Defer/Skip button
                 if showDeferButton {
@@ -922,6 +1460,18 @@ struct UIRecipeView: View {
                 .buttonStyle(CommitButtonStyle(isEnabled: isFormValid && !isSubmitting))
                 .disabled(!isFormValid || isSubmitting)
             }
+        }
+    }
+    
+    /// Components that have their own built-in action button
+    private var hasBuiltInButton: Bool {
+        switch recipe.componentType {
+        case .authGoogle, .authApple, .authOAuth, .serviceConnect:
+            return true
+        case .optionButtons, .optionCards, .quickReplies, .infoChips, .actionCards:
+            return true  // These are tappable directly
+        default:
+            return false
         }
     }
     
@@ -1065,6 +1615,361 @@ struct UIRecipeView: View {
         title: "Select Category"
     ))
     .padding()
+}
+
+// MARK: - Brand Styles (Service-specific branding)
+
+/// Brand styling for known services
+struct BrandStyle {
+    let primaryColor: Color
+    let secondaryColor: Color?
+    let textColor: Color
+    let iconName: String
+    let fontWeight: Font.Weight
+    let cornerRadius: CGFloat
+    
+    // Known service brands
+    static let google = BrandStyle(
+        primaryColor: Color(red: 0.26, green: 0.52, blue: 0.96), // Google Blue
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "g.circle.fill",
+        fontWeight: .medium,
+        cornerRadius: 4
+    )
+    
+    static let apple = BrandStyle(
+        primaryColor: .black,
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "apple.logo",
+        fontWeight: .medium,
+        cornerRadius: 8
+    )
+    
+    static let stripe = BrandStyle(
+        primaryColor: Color(red: 0.39, green: 0.35, blue: 0.95), // Stripe Purple
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "creditcard.fill",
+        fontWeight: .semibold,
+        cornerRadius: 6
+    )
+    
+    static let amadeus = BrandStyle(
+        primaryColor: Color(red: 0.0, green: 0.27, blue: 0.53), // Amadeus Navy
+        secondaryColor: Color(red: 0.0, green: 0.65, blue: 0.89),
+        textColor: .white,
+        iconName: "airplane",
+        fontWeight: .semibold,
+        cornerRadius: 4
+    )
+    
+    static let booking = BrandStyle(
+        primaryColor: Color(red: 0.0, green: 0.21, blue: 0.53), // Booking.com Blue
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "bed.double.fill",
+        fontWeight: .bold,
+        cornerRadius: 2
+    )
+    
+    static let gmail = BrandStyle(
+        primaryColor: Color(red: 0.92, green: 0.26, blue: 0.21), // Gmail Red
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "envelope.fill",
+        fontWeight: .medium,
+        cornerRadius: 4
+    )
+    
+    static let slack = BrandStyle(
+        primaryColor: Color(red: 0.23, green: 0.09, blue: 0.33), // Slack Purple
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "number",
+        fontWeight: .bold,
+        cornerRadius: 4
+    )
+    
+    static let openai = BrandStyle(
+        primaryColor: Color(red: 0.0, green: 0.65, blue: 0.52), // OpenAI Green-ish
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "brain",
+        fontWeight: .medium,
+        cornerRadius: 8
+    )
+    
+    static let twilio = BrandStyle(
+        primaryColor: Color(red: 0.95, green: 0.23, blue: 0.27), // Twilio Red
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "phone.fill",
+        fontWeight: .semibold,
+        cornerRadius: 4
+    )
+    
+    static let plaid = BrandStyle(
+        primaryColor: .black,
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "building.columns.fill",
+        fontWeight: .semibold,
+        cornerRadius: 8
+    )
+    
+    static let calendar = BrandStyle(
+        primaryColor: Color(red: 0.26, green: 0.52, blue: 0.96), // Google Blue
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "calendar",
+        fontWeight: .medium,
+        cornerRadius: 4
+    )
+    
+    static let uber = BrandStyle(
+        primaryColor: .black,
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "car.fill",
+        fontWeight: .bold,
+        cornerRadius: 8
+    )
+    
+    static let defaultStyle = BrandStyle(
+        primaryColor: BronColors.gray700,
+        secondaryColor: nil,
+        textColor: .white,
+        iconName: "key.fill",
+        fontWeight: .medium,
+        cornerRadius: 4
+    )
+    
+    /// Get brand style from provider name
+    static func forProvider(_ provider: String?) -> BrandStyle {
+        guard let provider = provider?.lowercased() else { return defaultStyle }
+        
+        switch provider {
+        case "google", "gmail", "google_calendar", "google_drive":
+            return provider.contains("mail") ? gmail : google
+        case "apple":
+            return apple
+        case "stripe":
+            return stripe
+        case "amadeus", "skyscanner", "kiwi":
+            return amadeus
+        case "booking", "booking.com", "hotels", "airbnb":
+            return booking
+        case "slack":
+            return slack
+        case "openai", "chatgpt":
+            return openai
+        case "twilio":
+            return twilio
+        case "plaid":
+            return plaid
+        case "calendar":
+            return calendar
+        case "uber", "lyft":
+            return uber
+        default:
+            return defaultStyle
+        }
+    }
+}
+
+// MARK: - Action Button Style (Broadcast Control Panel)
+
+/// Button style that feels like a control panel - immediate feedback, no bounce
+struct ActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? BronColors.gray050 : BronColors.surface)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Branded Auth Button (Real OAuth)
+
+/// Auth button that triggers real OAuth flow via ASWebAuthenticationSession
+struct BrandedAuthButton: View {
+    let brand: BrandStyle
+    let providerName: String
+    let description: String?
+    let bronId: String
+    let onSuccess: (OAuthResult) -> Void
+    let onError: (Error) -> Void
+    
+    @StateObject private var authService = AuthenticationService.shared
+    @State private var isAuthenticating = false
+    @State private var authError: String?
+    @State private var authSuccess: String?
+    
+    var body: some View {
+        VStack(spacing: BronLayout.spacingM) {
+            // Success state
+            if let successMessage = authSuccess {
+                HStack(spacing: BronLayout.spacingS) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(successMessage)
+                        .font(BronTypography.bodyM)
+                        .foregroundStyle(BronColors.textPrimary)
+                }
+                .padding(BronLayout.spacingM)
+            }
+            // Error state
+            else if let error = authError {
+                VStack(spacing: BronLayout.spacingS) {
+                    Text(error)
+                        .font(BronTypography.bodyS)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                    
+                    Button("Try Again") {
+                        authError = nil
+                        startAuth()
+                    }
+                    .font(BronTypography.button)
+                    .foregroundStyle(brand.primaryColor)
+                }
+                .padding(BronLayout.spacingM)
+            }
+            // Normal state - show auth button
+            else {
+                Button {
+                    startAuth()
+                } label: {
+                    HStack(spacing: BronLayout.spacingM) {
+                        if isAuthenticating {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: brand.textColor))
+                        } else {
+                            Image(systemName: brand.iconName)
+                                .font(.system(size: 20, weight: brand.fontWeight))
+                        }
+                        
+                        Text(isAuthenticating ? "Signing in..." : "Sign in with \(providerName)")
+                            .font(.system(size: 18, weight: brand.fontWeight))
+                    }
+                    .foregroundStyle(brand.textColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(brand.primaryColor)
+                    .clipShape(RoundedRectangle(cornerRadius: brand.cornerRadius))
+                }
+                .buttonStyle(.plain)
+                .disabled(isAuthenticating)
+                
+                // Subtle description
+                if let description = description {
+                    Text(description)
+                        .font(BronTypography.meta)
+                        .foregroundStyle(BronColors.textMeta)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+        .padding(BronLayout.spacingM)
+    }
+    
+    private func startAuth() {
+        guard !bronId.isEmpty else {
+            authError = "Missing Bron ID for authentication"
+            return
+        }
+        
+        isAuthenticating = true
+        authError = nil
+        
+        Task {
+            do {
+                let result = try await authService.startOAuth(
+                    provider: providerName.lowercased(),
+                    bronId: bronId
+                )
+                
+                await MainActor.run {
+                    isAuthenticating = false
+                    if result.success {
+                        authSuccess = result.message
+                        onSuccess(result)
+                    } else {
+                        authError = result.message
+                    }
+                }
+            } catch let error as OAuthError {
+                await MainActor.run {
+                    isAuthenticating = false
+                    switch error {
+                    case .cancelled:
+                        // User cancelled - don't show error
+                        break
+                    default:
+                        authError = error.localizedDescription
+                        onError(error)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isAuthenticating = false
+                    authError = error.localizedDescription
+                    onError(error)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Flow Layout (for Quick Replies)
+
+/// A horizontal wrapping layout for pill-shaped buttons
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = arrangeSubviews(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+    
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrangeSubviews(proposal: proposal, subviews: subviews)
+        
+        for (index, frame) in result.frames.enumerated() {
+            let position = CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY)
+            subviews[index].place(at: position, proposal: .init(frame.size))
+        }
+    }
+    
+    private func arrangeSubviews(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
+        let maxWidth = proposal.width ?? .infinity
+        var frames: [CGRect] = []
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            
+            if currentX + size.width > maxWidth && currentX > 0 {
+                // Move to next line
+                currentX = 0
+                currentY += lineHeight + spacing
+                lineHeight = 0
+            }
+            
+            frames.append(CGRect(x: currentX, y: currentY, width: size.width, height: size.height))
+            
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+            totalHeight = max(totalHeight, currentY + size.height)
+        }
+        
+        return (CGSize(width: maxWidth, height: totalHeight), frames)
+    }
 }
 
 #Preview("Confirmation") {

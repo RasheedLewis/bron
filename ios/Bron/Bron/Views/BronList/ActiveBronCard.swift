@@ -11,13 +11,16 @@ struct ActiveBronCard: View {
     let bron: BronInstance
     
     private var avatarState: AvatarState {
-        AvatarState.from(taskState: bron.currentTask?.state.rawValue)
+        if bron.status == .completed {
+            return .success
+        }
+        return AvatarState.from(taskState: bron.currentTask?.state.rawValue)
     }
     
     var body: some View {
         HStack(alignment: .top, spacing: BronLayout.spacingM) {
-            // Commit rule for active items
-            if isActive {
+            // Commit rule for items needing attention
+            if needsAttention {
                 CommitRule(orientation: .vertical, length: nil)
             }
             
@@ -32,16 +35,25 @@ struct ActiveBronCard: View {
                     .foregroundStyle(BronColors.textPrimary)
                     .lineLimit(1)
                 
-                // Status
-                BronStatusBadge(status: statusText)
+                // Current step (if available)
+                if let stepInfo = currentStepInfo {
+                    Text(stepInfo)
+                        .utilityStyle(.small)
+                        .foregroundStyle(BronColors.textSecondary)
+                        .lineLimit(1)
+                }
                 
-                // Metadata
+                // Status badge and metadata row
                 HStack(spacing: BronLayout.spacingM) {
+                    BronStatusBadge(status: statusText)
+                    
                     if let progress = progressText {
                         Text(progress)
                             .utilityStyle(.meta)
                             .foregroundStyle(BronColors.textMeta)
                     }
+                    
+                    Spacer()
                     
                     Text(bron.updatedAt, style: .relative)
                         .utilityStyle(.meta)
@@ -49,22 +61,47 @@ struct ActiveBronCard: View {
                 }
             }
             
-            Spacer()
+            Spacer(minLength: 0)
             
-            // Chevron
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(BronColors.gray300)
+            // Quick action or chevron
+            quickActionView
         }
         .padding(.vertical, BronLayout.spacingM)
         .padding(.horizontal, BronLayout.spacingM)
         .contentShape(Rectangle())
     }
     
+    // MARK: - Quick Actions
+    
+    @ViewBuilder
+    private var quickActionView: some View {
+        if bron.status == .needsInfo {
+            // Needs attention indicator
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(BronColors.commit)
+        } else if bron.status == .ready {
+            // Ready to execute
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(BronColors.textSecondary)
+        } else if bron.status == .completed {
+            // Completed checkmark
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(BronColors.textMeta)
+        } else {
+            // Default chevron
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(BronColors.gray300)
+        }
+    }
+    
     // MARK: - Computed Properties
     
-    private var isActive: Bool {
-        bron.status == .working || bron.status == .needsInfo
+    private var needsAttention: Bool {
+        bron.status == .needsInfo || bron.status == .ready
     }
     
     private var taskTitle: String {
@@ -75,54 +112,109 @@ struct ActiveBronCard: View {
         bron.currentTask?.state.displayName ?? bron.status.displayName
     }
     
-    private var progressText: String? {
+    /// Current step info (e.g., "Step 2: Research flights") or what we're waiting on
+    private var currentStepInfo: String? {
         guard let task = bron.currentTask else { return nil }
-        let steps = Int(task.progress * 5) + 1
-        return "Step \(steps)/5"
+        
+        // If waiting on something specific (like auth), show that
+        if let waitingOn = task.waitingOn, !waitingOn.isEmpty {
+            return "→ \(waitingOn)"
+        }
+        
+        // Otherwise show current step
+        guard !task.steps.isEmpty,
+              let currentStep = task.currentStep,
+              let stepIndex = task.currentStepIndex else {
+            return nil
+        }
+        return "Step \(stepIndex): \(currentStep.title)"
+    }
+    
+    /// Progress text (e.g., "2/5")
+    private var progressText: String? {
+        guard let task = bron.currentTask, !task.steps.isEmpty else {
+            return nil
+        }
+        return "\(task.completedStepCount)/\(task.steps.count)"
     }
 }
 
 #Preview {
     VStack(spacing: 0) {
+        // Needs info - with steps
         ActiveBronCard(bron: BronInstance(
-            name: "Receipt Helper",
+            name: "Austin Trip",
+            status: .needsInfo,
+            currentTask: BronTask(
+                title: "Plan Trip to Austin",
+                state: .needsInfo,
+                category: .personal,
+                bronId: UUID(),
+                steps: [
+                    TaskStep(title: "Gather trip details", status: .completed, order: 0),
+                    TaskStep(title: "Research flights", status: .inProgress, order: 1),
+                    TaskStep(title: "Book hotel", status: .pending, order: 2),
+                    TaskStep(title: "Create itinerary", status: .pending, order: 3),
+                ]
+            )
+        ))
+        
+        BronDivider()
+            .padding(.horizontal)
+        
+        // Working - with steps
+        ActiveBronCard(bron: BronInstance(
+            name: "Expense Report",
             status: .working,
             currentTask: BronTask(
                 title: "Submit Expense Receipt",
-                state: .needsInfo,
+                state: .executing,
                 category: .admin,
                 bronId: UUID(),
-                progress: 0.4
+                steps: [
+                    TaskStep(title: "Upload receipt", status: .completed, order: 0),
+                    TaskStep(title: "Extract details", status: .completed, order: 1),
+                    TaskStep(title: "Submit to system", status: .inProgress, order: 2),
+                ]
             )
         ))
         
         BronDivider()
             .padding(.horizontal)
         
+        // Ready to execute
         ActiveBronCard(bron: BronInstance(
-            name: "Podcast Setup",
-            status: .working,
-            currentTask: BronTask(
-                title: "Setup Podcast Episode",
-                state: .executing,
-                category: .creative,
-                bronId: UUID(),
-                progress: 0.6
-            )
-        ))
-        
-        BronDivider()
-            .padding(.horizontal)
-        
-        ActiveBronCard(bron: BronInstance(
-            name: "Weather Check",
+            name: "Email Draft",
             status: .ready,
             currentTask: BronTask(
-                title: "Daily Weather Update",
+                title: "Send Meeting Follow-up",
                 state: .ready,
+                category: .work,
+                bronId: UUID(),
+                steps: [
+                    TaskStep(title: "Draft email", status: .completed, order: 0),
+                    TaskStep(title: "Review", status: .completed, order: 1),
+                    TaskStep(title: "Send", status: .pending, order: 2),
+                ]
+            )
+        ))
+        
+        BronDivider()
+            .padding(.horizontal)
+        
+        // Completed
+        ActiveBronCard(bron: BronInstance(
+            name: "Weather Check",
+            status: .completed,
+            currentTask: BronTask(
+                title: "Daily Weather Update",
+                state: .done,
                 category: .personal,
                 bronId: UUID(),
-                progress: 1.0
+                steps: [
+                    TaskStep(title: "Check forecast", status: .completed, order: 0),
+                    TaskStep(title: "Send summary", status: .completed, order: 1),
+                ]
             )
         ))
     }

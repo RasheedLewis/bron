@@ -6,7 +6,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import Float, ForeignKey, String, Text
+from sqlalchemy import Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -38,6 +38,40 @@ class TaskCategory(str, Enum):
     PERSONAL = "personal"
     WORK = "work"
     OTHER = "other"
+
+
+class TaskStepStatus(str, Enum):
+    """Status of a task step."""
+    
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+
+
+class TaskStep(Base, UUIDMixin):
+    """
+    A single step in a task's execution plan.
+    
+    Steps are the to-do list that Bron works through.
+    """
+    
+    __tablename__ = "task_steps"
+    
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[TaskStepStatus] = mapped_column(
+        String(20),
+        default=TaskStepStatus.PENDING,
+        nullable=False,
+    )
+    order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    
+    # Relationship to Task
+    task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    task: Mapped["Task"] = relationship("Task", back_populates="steps")
+    
+    def __repr__(self) -> str:
+        return f"<TaskStep {self.order}: {self.title} [{self.status.value}]>"
 
 
 class Task(Base, UUIDMixin, TimestampMixin):
@@ -79,12 +113,39 @@ class Task(Base, UUIDMixin, TimestampMixin):
         foreign_keys=[bron_id],
     )
     
+    # Task steps (the execution plan)
+    steps: Mapped[list["TaskStep"]] = relationship(
+        "TaskStep",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="TaskStep.order",
+    )
+    
     # UI Recipes generated for this task
     ui_recipes: Mapped[list["UIRecipe"]] = relationship(
         "UIRecipe",
         back_populates="task",
         cascade="all, delete-orphan",
     )
+    
+    @property
+    def current_step(self) -> Optional["TaskStep"]:
+        """Get the current step being worked on."""
+        for step in self.steps:
+            if step.status == TaskStepStatus.IN_PROGRESS:
+                return step
+        for step in self.steps:
+            if step.status == TaskStepStatus.PENDING:
+                return step
+        return None
+    
+    @property
+    def step_progress(self) -> float:
+        """Calculate progress based on completed steps."""
+        if not self.steps:
+            return self.progress
+        completed = sum(1 for s in self.steps if s.status == TaskStepStatus.COMPLETED)
+        return completed / len(self.steps)
     
     def __repr__(self) -> str:
         return f"<Task {self.id}: {self.title} [{self.state.value}]>"

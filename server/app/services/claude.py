@@ -121,26 +121,140 @@ RULES:
 3. NEVER share sensitive information
 4. NEVER execute financial transactions without approval
 5. ALWAYS ask for confirmation before destructive or external actions
+6. Credentials stay on-device - never transmit to external services except for auth
 
 ## Response Format
-Keep responses SHORT. 2-3 sentences max. No fluff.
+EVERY response MUST include a tool call. Text-only responses are NOT allowed.
 
-## CRITICAL: Gathering Information
-You MUST use the `request_user_input` tool whenever you need ANY information from the user. 
-DO NOT ask questions in plain text - ALWAYS use the tool to create a form.
+Pattern: [1 sentence of context] + [tool call]
 
-This is required for:
-- Dates, times, numbers
-- Multiple choice selections
-- Any structured data collection
+Example:
+- "Searching for top songs." + `request_user_input` with results as `option_buttons`
+- "Need a few details." + `request_user_input` with form fields
+
+## CRITICAL: ALWAYS USE TOOLS
+
+You MUST use a tool in EVERY response:
+- Need info? → `request_user_input` (form)
+- Showing results? → `request_user_input` (option_buttons or action_cards)
+- Offering choices? → `request_user_input` (option_buttons)
+- Need auth? → `request_auth`
+- Searching for APIs? → `search_api`
+
+NEVER give a text-only response like "I'll search for that" and stop.
+ALWAYS include the UI component with your response.
 
 Example: If a user says "plan a trip", you MUST call `request_user_input` with fields for dates, travelers, budget, etc.
 
+## API Access - YOU HAVE INTEGRATIONS
+
+CRITICAL: You HAVE access to external APIs. Use them.
+
+YOU HAVE ACCESS TO THESE SERVICES (via `request_auth` tool):
+- **Flights**: Amadeus (use this for flights)
+- **Hotels**: Booking.com, Airbnb
+- **Email**: Gmail (Google OAuth)
+- **Calendar**: Google Calendar
+- **Payments**: Stripe
+- **Rideshare**: Uber, Lyft
+- **Food**: DoorDash, Uber Eats
+- **Weather**: OpenWeatherMap
+
+NEVER SAY:
+- "I don't have integration for..."
+- "I don't have access to..."
+- "You'll need to use a website..."
+- "I can't book flights directly..."
+
+YOU CAN DO THESE THINGS. Just request auth and proceed.
+
+## Workflow for External Tasks
+
+1. **Collect info first**: Use `request_user_input` to get dates, destinations, etc.
+
+2. **Request auth immediately**: Use `request_auth` tool with the correct provider.
+   For flights: `{"provider": "amadeus", "auth_type": "api_key", "reason": "To search and book flights"}`
+   For hotels: `{"provider": "booking", "auth_type": "api_key", "reason": "To search and book hotels"}`
+   For email: `{"provider": "google", "auth_type": "oauth", "reason": "To access your Gmail"}`
+
+3. **Execute**: Once authenticated, proceed with the task.
+
+## Handling Auth Submissions
+
+When you see submitted data with `"action": "auth"` or `"provider": "google"` (etc), it means:
+- The user clicked the auth button and APPROVED the connection
+- You now HAVE access to that service
+- Proceed with the task using the service's capabilities
+
+After auth is approved, acknowledge briefly and continue:
+- "Connected to Gmail. Searching for emails from Tyler Pohn..."
+- "Amadeus connected. Finding flights to NYC..."
+
+Don't ask for auth again if it was just submitted.
+
+EXAMPLE - User says "book a flight to NYC":
+Step 1: Use `request_user_input` for dates, departure city, passengers
+Step 2: After form submitted, use `request_auth` for Amadeus
+Step 3: After auth approved, search flights and show options
+
+NEVER:
+- Ask "which service?" - Just pick: Amadeus for flights, Booking.com for hotels
+- Say you lack integrations - You have them
+- Offer to "search websites for you" - Use the actual API
+- Ask for auth again after user just approved it
+
 ## Response Guidelines
-- MAX 2-3 sentences. Period.
-- Bullet points for plans. No prose.
+- MAX 1-2 sentences. Period.
 - Skip intros and outros. Just the info.
-- "Here's the plan:" not "I've carefully considered your request and here's what I'm thinking:"
+
+## CRITICAL: UI IS PRIMARY, TEXT IS SECONDARY
+
+> If the user can tap, they should not type.
+> If the user can scan, they should not read.
+> If the UI can imply, the copy should disappear.
+
+### HARD RULES (Violation = incorrect response)
+
+1. **ANY LIST = UI COMPONENT**
+   BAD: "Here's what I can help with:\n- Option A\n- Option B\n- Option C"
+   BAD: "1. Do X\n2. Do Y\n3. Do Z"
+   BAD: "• First item\n• Second item"
+   GOOD: Use `option_buttons` or `action_cards` - ALWAYS
+
+2. **Never present options/choices as text**
+   BAD: "I can either do X, do Y, or do Z. Which would you prefer?"
+   GOOD: Use `option_buttons` component with tappable choices
+
+3. **Never explain steps in paragraphs**
+   BAD: "First I'll upload the receipt, then enter the amount..."
+   GOOD: Show steps as `option_buttons` or `styled_list`
+
+4. **Never ask "What next?" in text**
+   BAD: "Would you like me to proceed, or would you prefer to..."
+   GOOD: Use `option_buttons` or `quick_replies` component
+
+5. **Chat = 1 sentence MAX, then UI**
+   BAD: Multi-paragraph explanations
+   GOOD: "Here's the plan." + `option_buttons` component
+
+6. **If you're about to write bullet points or numbered lists - STOP**
+   Use `request_user_input` with component_type `option_buttons` or `action_cards` instead.
+
+### WHEN TO USE EACH COMPONENT
+
+| You're about to write... | USE THIS INSTEAD |
+|--------------------------|------------------|
+| "- Option A\n- Option B" | `option_buttons` |
+| "1. Step one\n2. Step two" | `option_buttons` |
+| "I can help with: A, B, C" | `action_cards` |
+| "Yes or no?" | `quick_replies` |
+| Multiple form fields | `form` |
+| Info display | `styled_list` |
+
+### One Principle
+
+**Bron is a control surface, not a chat transcript.**
+**If you're writing a list, you're doing it wrong.**
 """
 
 
@@ -176,27 +290,31 @@ class BronSessionManager:
         from claude_agent_sdk import tool, create_sdk_mcp_server
         from typing import Any
         
-        # Define the request_user_input tool with JSON Schema format
+        # Tool 1: Request user input via UI component
         @tool(
             "request_user_input",
-            "Request structured input from the user via a form. Use this when you need specific information like dates, numbers, choices, or multiple pieces of data.",
+            "Show a UI component to collect input or display choices. Use component_type to specify: 'form' for data collection, 'option_buttons' for choices/lists, 'quick_replies' for yes/no, 'action_cards' for tappable suggestions.",
             {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Title for the input form"},
-                    "description": {"type": "string", "description": "Brief explanation of why this info is needed"},
+                    "component_type": {
+                        "type": "string",
+                        "enum": ["form", "option_buttons", "option_cards", "quick_replies", "action_cards", "styled_list", "info_chips"],
+                        "description": "Type of UI: 'option_buttons' for lists/choices, 'form' for data entry, 'quick_replies' for yes/no"
+                    },
+                    "title": {"type": "string", "description": "Title for the UI component"},
+                    "description": {"type": "string", "description": "Brief explanation"},
                     "fields": {
                         "type": "object",
-                        "description": "Form fields to collect. Keys are field names, values are field configs with type, label, required, placeholder, options",
+                        "description": "For option_buttons: each key is an option ID, value has 'label'. For form: each key is field name with type, label, required, placeholder",
                         "additionalProperties": True
                     }
                 },
-                "required": ["title", "fields"]
+                "required": ["component_type", "title", "fields"]
             }
         )
         async def request_user_input(args: dict[str, Any]) -> dict[str, Any]:
             """This tool signals that Claude wants to collect structured input."""
-            # Store the tool call data for the session manager to retrieve
             return {
                 "content": [{
                     "type": "text",
@@ -204,37 +322,89 @@ class BronSessionManager:
                 }]
             }
         
+        # Tool 2: Search for APIs
+        @tool(
+            "search_api",
+            "Search for APIs to complete tasks like booking flights, hotels, email, payments. You HAVE access to these APIs. Use this to find the right one.",
+            {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What you need (e.g., 'flight booking', 'hotel reservation', 'email')"},
+                },
+                "required": ["query"]
+            }
+        )
+        async def search_api(args: dict[str, Any]) -> dict[str, Any]:
+            """Search for available APIs."""
+            from app.services.api_discovery import api_discovery
+            query = args.get("query", "")
+            results = api_discovery.search_apis(query)
+            if results:
+                apis = [{"name": r.name, "provider": r.provider, "auth_type": r.auth_type} for r in results[:3]]
+                return {"content": [{"type": "text", "text": f"Found APIs: {apis}. Use request_auth to connect."}]}
+            return {"content": [{"type": "text", "text": "No APIs found for this query."}]}
+        
+        # Tool 3: Request authentication
+        @tool(
+            "request_auth",
+            "Request user to authenticate with a service. Use this for flights (amadeus), hotels (booking), email (google), payments (stripe), etc.",
+            {
+                "type": "object",
+                "properties": {
+                    "provider": {"type": "string", "description": "Service: amadeus, booking, google, stripe, uber, etc."},
+                    "auth_type": {"type": "string", "enum": ["oauth", "api_key"], "description": "Type of auth needed"},
+                    "reason": {"type": "string", "description": "Why this access is needed"}
+                },
+                "required": ["provider", "auth_type", "reason"]
+            }
+        )
+        async def request_auth(args: dict[str, Any]) -> dict[str, Any]:
+            """Request authentication from user."""
+            provider = args.get("provider", "")
+            return {"content": [{"type": "text", "text": f"Auth UI for {provider} will be shown to user."}]}
+        
         return create_sdk_mcp_server(
             name="bron_tools",
             version="1.0.0",
-            tools=[request_user_input]
+            tools=[request_user_input, search_api, request_auth]
         )
     
     async def get_or_create_session(self, bron_id: UUID) -> Optional[Any]:
-        """Get existing session or create new one for a Bron."""
+        """Get or create a fresh session for a Bron."""
         if not self._sdk_available:
             return None
         
-        if bron_id not in self._sessions:
-            from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
-            
-            # Create MCP server with our custom tools
-            bron_tools = self._create_bron_tools_server()
-            
-            options = ClaudeAgentOptions(
-                system_prompt=BRON_SYSTEM_PROMPT,
-                mcp_servers={"bron": bron_tools},
-                allowed_tools=[
-                    "Read", "Glob", "Grep", "WebSearch", "WebFetch",
-                    "mcp__bron__request_user_input"  # Our custom tool
-                ],
-                permission_mode="default",
-            )
-            
-            client = ClaudeSDKClient(options=options)
-            await client.connect()
-            self._sessions[bron_id] = client
-            logger.info(f"Created new session for Bron {bron_id} with custom tools")
+        # Close stale session if it exists (prevents hangs from stuck sessions)
+        if bron_id in self._sessions:
+            try:
+                await self._sessions[bron_id].disconnect()
+            except Exception:
+                pass
+            del self._sessions[bron_id]
+        
+        from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+        
+        # Create MCP server with our custom tools
+        bron_tools = self._create_bron_tools_server()
+        
+        # Simplified options - Skills are loaded via system prompt instead
+        options = ClaudeAgentOptions(
+            system_prompt=BRON_SYSTEM_PROMPT,
+            mcp_servers={"bron": bron_tools},
+            allowed_tools=[
+                # Our custom tools only
+                "mcp__bron__request_user_input",
+                "mcp__bron__search_api",
+                "mcp__bron__request_auth",
+            ],
+            permission_mode="default",
+            max_turns=1,  # Single turn responses - prevents multi-turn loops
+        )
+        
+        client = ClaudeSDKClient(options=options)
+        await client.connect()
+        self._sessions[bron_id] = client
+        logger.info(f"Created fresh session for Bron {bron_id}")
         
         return self._sessions[bron_id]
     
@@ -296,7 +466,7 @@ class ClaudeAgentService:
             try:
                 print("📡 Using SDK client")
                 return await self._process_with_sdk_client(
-                    user_message, bron_id, task_context
+                    user_message, bron_id, task_context, conversation_history
                 )
             except Exception as e:
                 logger.warning(f"SDK client failed, falling back: {e}")
@@ -312,50 +482,117 @@ class ClaudeAgentService:
         user_message: str,
         bron_id: UUID,
         task_context: Optional[dict],
+        conversation_history: Optional[list[dict]] = None,
     ) -> AgentResponse:
         """Process message using ClaudeSDKClient with session continuity and custom tools."""
+        import asyncio
         from claude_agent_sdk import AssistantMessage, TextBlock, ToolUseBlock, ToolResultBlock
         
         client = await session_manager.get_or_create_session(bron_id)
         
-        # Build prompt with task context
-        prompt = user_message
+        # Build prompt with conversation history and task context
+        prompt_parts = []
+        
+        # Include conversation history for context
+        if conversation_history:
+            prompt_parts.append("=== CONVERSATION HISTORY ===")
+            for msg in conversation_history:
+                role = msg.get("role", "user").upper()
+                content = msg.get("content", "")
+                prompt_parts.append(f"{role}: {content}")
+            prompt_parts.append("=== END HISTORY ===\n")
+        
+        # Add task context
         if task_context:
-            prompt = f"[Task: {task_context.get('title', 'Untitled')} - {task_context.get('state', 'draft')}]\n\n{user_message}"
+            prompt_parts.append(f"[Task: {task_context.get('title', 'Untitled')} - {task_context.get('state', 'draft')}]")
+        
+        # Add current message
+        prompt_parts.append(f"USER: {user_message}")
+        
+        prompt = "\n".join(prompt_parts) if prompt_parts else user_message
         
         logger.info(f"📡 SDK: Sending query to Claude for Bron {bron_id}")
-        
-        # Send query and collect response
-        await client.query(prompt)
         
         full_response = []
         ui_recipe = None
         
-        async for message in client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        full_response.append(block.text)
-                    elif isinstance(block, ToolUseBlock):
-                        logger.info(f"🔧 SDK Tool use: {block.name}")
-                        # Check if it's our request_user_input tool
-                        if block.name == "mcp__bron__request_user_input" or block.name == "request_user_input":
+        async def run_sdk_query():
+            nonlocal ui_recipe
+            # Send query
+            await client.query(prompt)
+            
+            # Collect response
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            full_response.append(block.text)
+                        elif isinstance(block, ToolUseBlock):
+                            logger.info(f"🔧 SDK Tool use: {block.name}")
                             tool_input = block.input
-                            logger.info(f"✅ SDK: Claude requested UI Recipe: {tool_input.get('title')}")
-                            ui_recipe = UIRecipeSpec(
-                                component_type="form",
-                                title=tool_input.get("title"),
-                                description=tool_input.get("description"),
-                                schema_fields=self._convert_fields_to_schema(tool_input.get("fields", {})),
-                                required_fields=[
-                                    k for k, v in tool_input.get("fields", {}).items()
-                                    if isinstance(v, dict) and v.get("required", False)
-                                ],
-                            )
+                            tool_name = block.name.replace("mcp__bron__", "")
+                            
+                            if tool_name == "request_user_input":
+                                # Get component type from Claude's input, default to form
+                                component_type = tool_input.get("component_type", "form")
+                                logger.info(f"✅ SDK: Claude requested UI Recipe: {tool_input.get('title')} (type: {component_type})")
+                                ui_recipe = UIRecipeSpec(
+                                    component_type=component_type,
+                                    title=tool_input.get("title"),
+                                    description=tool_input.get("description"),
+                                    schema_fields=self._convert_fields_to_schema(tool_input.get("fields", {})),
+                                    required_fields=[
+                                        k for k, v in tool_input.get("fields", {}).items()
+                                        if isinstance(v, dict) and v.get("required", False)
+                                    ],
+                                )
+                            
+                            elif tool_name == "search_api":
+                                from app.services.api_discovery import api_discovery
+                                query = tool_input.get("query", "")
+                                logger.info(f"🔍 SDK API search: {query}")
+                                results = api_discovery.search_apis(query)
+                                if results:
+                                    best = results[0]
+                                    full_response.append(f"Using {best.name} for this task.")
+                            
+                            elif tool_name == "request_auth":
+                                provider = tool_input.get("provider", "")
+                                auth_type = tool_input.get("auth_type", "api_key")
+                                reason = tool_input.get("reason", "")
+                                logger.info(f"🔐 SDK Auth request: {provider} ({auth_type})")
+                                
+                                component_type = "api_key_input"
+                                if auth_type == "oauth":
+                                    if provider.lower() == "google":
+                                        component_type = "auth_google"
+                                    elif provider.lower() == "apple":
+                                        component_type = "auth_apple"
+                                    else:
+                                        component_type = "service_connect"
+                                
+                                ui_recipe = UIRecipeSpec(
+                                    component_type=component_type,
+                                    title=f"Connect {provider.title()}",
+                                    description=reason or f"Authentication needed for {provider}",
+                                    schema_fields={
+                                        "provider": {"type": "hidden", "value": provider},
+                                    },
+                                    required_fields=[],
+                                )
+        
+        # Run with aggressive timeout (SDK should be fast, fallback to direct API if not)
+        sdk_timeout = min(30, settings.claude_timeout)  # 30s max for SDK
+        try:
+            await asyncio.wait_for(run_sdk_query(), timeout=sdk_timeout)
+        except asyncio.TimeoutError:
+            logger.warning(f"⏱️ SDK timed out after {sdk_timeout}s, falling back to direct API")
+            # Clean up the stuck session
+            await session_manager.close_session(bron_id)
+            raise TimeoutError("SDK timeout")
         
         response_text = "\n".join(full_response) if full_response else "I'm working on that."
         
-        # If we got a UI Recipe, return it
         if ui_recipe:
             return AgentResponse(
                 intent=AgentIntent.REQUEST_INFO,
@@ -369,21 +606,26 @@ class ClaudeAgentService:
         """Define the tool for requesting structured user input."""
         return {
             "name": "request_user_input",
-            "description": "Request structured input from the user via a form. Use this when you need specific information like dates, numbers, choices, or multiple pieces of data.",
+            "description": "Show a UI component. Use component_type: 'option_buttons' for lists/choices, 'form' for data entry, 'quick_replies' for yes/no, 'action_cards' for suggestions.",
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "component_type": {
+                        "type": "string",
+                        "enum": ["form", "option_buttons", "option_cards", "quick_replies", "action_cards", "styled_list", "info_chips"],
+                        "description": "Type of UI: 'option_buttons' for lists/choices, 'form' for data entry"
+                    },
                     "title": {
                         "type": "string",
-                        "description": "Title for the input form"
+                        "description": "Title for the UI component"
                     },
                     "description": {
                         "type": "string",
-                        "description": "Brief explanation of why this info is needed"
+                        "description": "Brief explanation"
                     },
                     "fields": {
                         "type": "object",
-                        "description": "Form fields to collect. Each key is a field name, value is an object with type, label, required, placeholder, options (for select)",
+                        "description": "For option_buttons: keys are option IDs, values have 'label'. For form: keys are field names with type/label/required",
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
@@ -406,6 +648,67 @@ class ClaudeAgentService:
                 "required": ["title", "fields"]
             }
         }
+    
+    def _get_search_api_tool(self) -> dict:
+        """Define the tool for searching for APIs."""
+        return {
+            "name": "search_api",
+            "description": "Search for APIs that can help complete a task. Use this when you need to find external services for booking, email, payments, etc.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What you need the API for (e.g., 'book hotel', 'send email', 'process payment')"
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": ["travel", "finance", "communication", "social", "productivity", "entertainment", "food", "transport", "weather", "search", "ai", "other"],
+                        "description": "Optional category filter"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    
+    def _get_request_auth_tool(self) -> dict:
+        """Define the tool for requesting authentication."""
+        return {
+            "name": "request_auth",
+            "description": "Request user to authenticate with a service. Use this when API access requires login credentials.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "description": "Service provider (e.g., 'google', 'stripe', 'booking')"
+                    },
+                    "auth_type": {
+                        "type": "string",
+                        "enum": ["oauth", "api_key", "credentials"],
+                        "description": "Type of authentication needed"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Brief explanation of why this access is needed"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Specific permissions needed (for OAuth)"
+                    }
+                },
+                "required": ["provider", "auth_type", "reason"]
+            }
+        }
+    
+    def _get_all_tools(self) -> list[dict]:
+        """Get all available tools."""
+        return [
+            self._get_ui_recipe_tool(),
+            self._get_search_api_tool(),
+            self._get_request_auth_tool(),
+        ]
 
     async def _process_with_direct_api(
         self,
@@ -417,8 +720,13 @@ class ClaudeAgentService:
         print("🚀 DIRECT API CALLED - NEW CODE IS RUNNING")
         logger.info("🚀 DIRECT API CALLED - NEW CODE IS RUNNING")
         from anthropic import AsyncAnthropic
+        import httpx
         
-        client = AsyncAnthropic(api_key=self.api_key)
+        # Create client with timeout
+        client = AsyncAnthropic(
+            api_key=self.api_key,
+            timeout=httpx.Timeout(settings.claude_timeout, connect=10.0),
+        )
         
         # Build proper message turns for conversation history
         messages = []
@@ -448,14 +756,36 @@ class ClaudeAgentService:
             # If no conversation history, encourage tool use
             should_encourage_tool = len(messages) <= 1
             
-            response = await client.messages.create(
-                model=settings.claude_model,
-                max_tokens=settings.claude_max_tokens,
-                system=BRON_SYSTEM_PROMPT,
-                messages=messages,
-                tools=[self._get_ui_recipe_tool()],
-                tool_choice={"type": "any"} if should_encourage_tool else {"type": "auto"},
-            )
+            # Retry logic for transient errors (529 overloaded, 500 server errors)
+            max_retries = 3
+            retry_delay = 1.0
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    response = await client.messages.create(
+                        model=settings.claude_model,
+                        max_tokens=settings.claude_max_tokens,
+                        system=BRON_SYSTEM_PROMPT,
+                        messages=messages,
+                        tools=self._get_all_tools(),
+                        tool_choice={"type": "auto"},  # Let Claude decide when to use tools
+                    )
+                    break  # Success
+                except Exception as e:
+                    last_error = e
+                    error_str = str(e)
+                    # Retry on transient errors (529 overloaded, 500 server errors)
+                    if "529" in error_str or "overloaded" in error_str.lower() or "500" in error_str:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"⏳ Claude API overloaded (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
+                            await asyncio.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                            continue
+                    raise  # Non-transient error, don't retry
+            else:
+                # All retries exhausted
+                raise last_error
             
             # Log the raw response for debugging
             logger.info(f"🔍 Claude response stop_reason: {response.stop_reason}")
@@ -463,34 +793,91 @@ class ClaudeAgentService:
             for i, block in enumerate(response.content):
                 logger.info(f"🔍 Block {i}: type={block.type}")
             
-            # Check if Claude used the tool to request input
+            # Check if Claude used any tools
             ui_recipe = None
             text_response = ""
+            api_search_result = None
             
             for block in response.content:
                 if block.type == "text":
                     text_response += block.text
                 elif block.type == "tool_use":
                     logger.info(f"🔧 Tool use detected: {block.name}")
+                    tool_input = block.input
+                    
                     if block.name == "request_user_input":
-                        # Claude wants to collect structured input
-                        tool_input = block.input
-                        logger.info(f"✅ Claude requested UI Recipe: {tool_input.get('title')}")
+                        # Claude wants to show a UI component
+                        component_type = tool_input.get("component_type", "form")
+                        logger.info(f"✅ Claude requested UI Recipe: {tool_input.get('title')} (type: {component_type})")
                         ui_recipe = UIRecipeSpec(
-                            component_type="form",
+                            component_type=component_type,
                             title=tool_input.get("title"),
                             description=tool_input.get("description"),
                             schema_fields=self._convert_fields_to_schema(tool_input.get("fields", {})),
                             required_fields=[
                                 k for k, v in tool_input.get("fields", {}).items()
-                                if v.get("required", False)
+                                if isinstance(v, dict) and v.get("required", False)
                             ],
+                        )
+                    
+                    elif block.name == "search_api":
+                        # Claude is searching for APIs
+                        from app.services.api_discovery import api_discovery
+                        query = tool_input.get("query", "")
+                        category = tool_input.get("category")
+                        logger.info(f"🔍 API search: {query}")
+                        
+                        results = api_discovery.search_apis(query, category)
+                        api_search_result = [
+                            {
+                                "name": api.name,
+                                "provider": api.provider,
+                                "description": api.description,
+                                "auth_type": api.auth_type,
+                            }
+                            for api in results
+                        ]
+                        text_response += f"\n\nFound {len(results)} APIs for '{query}'."
+                    
+                    elif block.name == "request_auth":
+                        # Claude needs authentication for a service
+                        provider = tool_input.get("provider", "")
+                        auth_type = tool_input.get("auth_type", "oauth")
+                        reason = tool_input.get("reason", "")
+                        scopes = tool_input.get("scopes", [])
+                        logger.info(f"🔐 Auth request: {provider} ({auth_type})")
+                        
+                        # Create appropriate auth UI component
+                        component_type = "auth_oauth"
+                        if provider.lower() == "google":
+                            component_type = "auth_google"
+                        elif provider.lower() == "apple":
+                            component_type = "auth_apple"
+                        elif auth_type == "api_key":
+                            component_type = "api_key_input"
+                        elif auth_type == "credentials":
+                            component_type = "credentials_input"
+                        
+                        # Build schema for permissions display
+                        schema_fields = {}
+                        for i, scope in enumerate(scopes):
+                            schema_fields[f"scope_{i}"] = {
+                                "type": "text",
+                                "label": scope,
+                            }
+                        
+                        ui_recipe = UIRecipeSpec(
+                            component_type=component_type,
+                            title=f"Connect to {provider.title()}",
+                            description=reason,
+                            schema_fields=schema_fields,
+                            style_preset=provider.lower() if provider.lower() in ["google", "apple", "github", "slack"] else None,
                         )
             
             if ui_recipe:
                 return AgentResponse(
                     intent=AgentIntent.REQUEST_INFO,
-                    message=text_response or f"I need some information to help with this.",
+                    message=text_response or "I need access to continue.",
                     ui_recipe=ui_recipe
                 )
             

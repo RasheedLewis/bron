@@ -7,10 +7,11 @@ they're registered with SQLAlchemy before migrations run.
 
 from app.models.base import TimestampMixin, UUIDMixin
 from app.models.bron import BronInstance, BronStatus
-from app.models.task import Task, TaskState, TaskCategory
+from app.models.task import Task, TaskState, TaskCategory, TaskStep, TaskStepStatus
 from app.models.skill import Skill, SkillStep, SkillParameter
 from app.models.ui_recipe import UIRecipe, UIComponentType, FieldType, UIStyle, UIStylePreset
 from app.models.chat import ChatMessage, MessageRole
+from app.models.credential import Credential, CredentialType, ServiceProvider
 
 __all__ = [
     # Base
@@ -23,6 +24,8 @@ __all__ = [
     "Task",
     "TaskState",
     "TaskCategory",
+    "TaskStep",
+    "TaskStepStatus",
     # Skill
     "Skill",
     "SkillStep",
@@ -36,4 +39,8 @@ __all__ = [
     # Chat
     "ChatMessage",
     "MessageRole",
+    # Credentials
+    "Credential",
+    "CredentialType",
+    "ServiceProvider",
 ]

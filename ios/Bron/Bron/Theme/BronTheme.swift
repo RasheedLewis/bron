@@ -50,51 +50,86 @@ struct BronColors {
 // MARK: - Typography System
 
 /// Bron's typographic hierarchy
-/// Display: ALL CAPS, condensed, heavy (broadcast headlines)
-/// Utility: Sentence case, calm, neutral (body/control)
+/// Display: Bebas Neue - ALL CAPS, condensed, impactful (broadcast headlines)
+/// Utility: IBM Plex Sans - Sentence case, technical, precise (body/control)
 struct BronTypography {
     
-    // MARK: - Display Fonts (Impact / Broadcast)
+    // MARK: - Font Names
+    // These must match the PostScript names in the font files
+    private static let bebasNeue = "BebasNeue-Regular"
+    private static let plexRegular = "IBMPlexSans-Regular"
+    private static let plexMedium = "IBMPlexSans-Medium"
+    private static let plexSemiBold = "IBMPlexSans-SemiBold"
+    private static let plexBold = "IBMPlexSans-Bold"
+    
+    // MARK: - Display Fonts (Bebas Neue)
     // Used for: Screen titles, Task titles, Status headers, Section labels
+    // Bebas Neue is naturally ALL CAPS and condensed
+    // LARGER sizes - we're not reading articles, text can take up space
     
     static var displayXL: Font {
-        .system(size: 44, weight: .black, design: .default)
+        .custom(bebasNeue, size: 56)
     }
     
     static var displayL: Font {
-        .system(size: 32, weight: .black, design: .default)
+        .custom(bebasNeue, size: 42)
     }
     
     static var displayM: Font {
-        .system(size: 20, weight: .heavy, design: .default)
+        .custom(bebasNeue, size: 28)
     }
     
     static var displayS: Font {
-        .system(size: 16, weight: .bold, design: .default)
+        .custom(bebasNeue, size: 22)
     }
     
-    // MARK: - Utility Fonts (Body / Control)
+    // Fallback to system font if custom font not loaded
+    static var display: Font {
+        .custom(bebasNeue, size: 24)
+    }
+    
+    // MARK: - Utility Fonts (IBM Plex Sans)
     // Used for: Chat messages, Descriptions, Forms, Metadata, Buttons
+    // IBM Plex Sans: Technical, precise, excellent readability
+    // LARGER sizes - fewer words = bigger text
     
     static var bodyL: Font {
-        .system(size: 17, weight: .regular, design: .default)
+        .custom(plexRegular, size: 20)
     }
     
     static var bodyM: Font {
-        .system(size: 15, weight: .regular, design: .default)
+        .custom(plexRegular, size: 18)
     }
     
     static var bodyS: Font {
-        .system(size: 13, weight: .regular, design: .default)
+        .custom(plexRegular, size: 16)
     }
     
     static var meta: Font {
-        .system(size: 12, weight: .medium, design: .default)
+        .custom(plexMedium, size: 14)
     }
     
     static var button: Font {
-        .system(size: 15, weight: .semibold, design: .default)
+        .custom(plexSemiBold, size: 18)
     }
+    
+    // Additional weights for flexibility
+    static func plex(size: CGFloat, weight: PlexWeight = .regular) -> Font {
+        switch weight {
+        case .regular: return .custom(plexRegular, size: size)
+        case .medium: return .custom(plexMedium, size: size)
+        case .semibold: return .custom(plexSemiBold, size: size)
+        case .bold: return .custom(plexBold, size: size)
+        }
+    }
+    
+    static func bebas(size: CGFloat) -> Font {
+        .custom(bebasNeue, size: size)
+    }
+}
+
+enum PlexWeight {
+    case regular, medium, semibold, bold
 }
 
 // MARK: - Layout Constants
